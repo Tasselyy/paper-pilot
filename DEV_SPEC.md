@@ -353,7 +353,7 @@ paper-pilot/
 - [x] E3 Rich 流式输出（astream_events 或等价） — CLI 能实时打印节点名与关键输出
   - 产物: `src/tracing/rich_output.py`
   - 验收: 手动运行 `python main.py --question "test"` 观察节点流式输出（或 Mock 测试）
-- [ ] E4 main.py CLI：输入 question，输出 final_answer + 引用 — 可配置 MCP 与 LLM，本地一键运行
+- [x] E4 main.py CLI：输入 question，输出 final_answer + 引用 — 可配置 MCP 与 LLM，本地一键运行
   - 产物: `main.py`（更新）
   - 验收: `python main.py --question "What is LoRA?" --dry-run` 输出 final_answer 与 sources
 - [ ] F1 LocalModelManager：Router 4-bit 加载与 classify_question — 无 GPU 时跳过或 Mock；有 GPU 时返回 (IntentType, confidence)
