@@ -344,7 +344,7 @@ paper-pilot/
 - [x] D4 load_memory / save_memory 节点，长期记忆 recall/memorize 接口 — 单元测试 Mock 长期记忆，断言调用与 state.accumulated_facts
   - 产物: `src/agent/nodes/memory_nodes.py`, `src/memory/long_term.py`, `src/memory/short_term.py`, `tests/unit/test_memory.py`
   - 验收: `pytest tests/unit/test_memory.py` 通过；recall 返回相关事实；memorize 写入 JSONL
-- [ ] E1 AgentTrace 结构与 reasoning_steps 写入 — 单轮运行后 state.reasoning_trace 与 Trace 文件一致
+- [x] E1 AgentTrace 结构与 reasoning_steps 写入 — 单轮运行后 state.reasoning_trace 与 Trace 文件一致
   - 产物: `src/tracing/tracer.py`（AgentTrace 类）, `tests/unit/test_tracer.py`
   - 验收: `pytest tests/unit/test_tracer.py` 通过；trace 记录包含 node_name、duration、output
 - [ ] E2 JSONL Trace 落盘（tracer.py） — 可配置路径，单条记录包含 intent/strategy/critic/final_answer
