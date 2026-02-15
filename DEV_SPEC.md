@@ -341,7 +341,7 @@ paper-pilot/
 - [x] D3 retry_refine 节点：根据 feedback 改写 question 或计划 — 单元测试断言 refinement 写入 state
   - 产物: `src/agent/nodes/retry_refine.py`, `tests/unit/test_retry_refine.py`
   - 验收: `pytest tests/unit/test_retry_refine.py` 通过；断言 state.question 被更新且含 feedback 关键词
-- [ ] D4 load_memory / save_memory 节点，长期记忆 recall/memorize 接口 — 单元测试 Mock 长期记忆，断言调用与 state.accumulated_facts
+- [x] D4 load_memory / save_memory 节点，长期记忆 recall/memorize 接口 — 单元测试 Mock 长期记忆，断言调用与 state.accumulated_facts
   - 产物: `src/agent/nodes/memory_nodes.py`, `src/memory/long_term.py`, `src/memory/short_term.py`, `tests/unit/test_memory.py`
   - 验收: `pytest tests/unit/test_memory.py` 通过；recall 返回相关事实；memorize 写入 JSONL
 - [ ] E1 AgentTrace 结构与 reasoning_steps 写入 — 单轮运行后 state.reasoning_trace 与 Trace 文件一致
