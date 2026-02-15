@@ -305,7 +305,7 @@ paper-pilot/
 - [x] B1 MCP Client 连接 RAG Server（stdio） — get_tools() 返回 query_knowledge_hub 等，可 ainvoke
   - 产物: `src/tools/mcp_client.py`
   - 验收: `pytest tests/unit/test_mcp_client.py` 通过（Mock stdio 传输）
-- [ ] B2 RAGToolWrapper：search/list_collections 封装 — 单元测试 Mock MCP，断言参数与解析结果
+- [x] B2 RAGToolWrapper：search/list_collections 封装 — 单元测试 Mock MCP，断言参数与解析结果
   - 产物: `src/tools/tool_wrapper.py`, `tests/unit/test_tool_wrapper.py`
   - 验收: `pytest tests/unit/test_tool_wrapper.py` 全部通过；断言参数归一化与错误处理
 - [ ] B3 Simple 策略节点：检索 + 合成（Cloud LLM） — 给定 state.intent.reformulated_query，写入 draft_answer、retrieved_contexts
