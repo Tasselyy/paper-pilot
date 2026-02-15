@@ -320,7 +320,7 @@ paper-pilot/
 - [x] C2 Slot Filling 节点与 SlotFillingOutput、Prompt — 单元测试 Mock LLM，断言 intent 被完整填充
   - 产物: `src/agent/nodes/slot_filling.py`, `src/prompts/slot_filling.py`, `tests/unit/test_slot_filling.py`
   - 验收: `pytest tests/unit/test_slot_filling.py` 通过；断言 entities/dimensions/reformulated_query 均非空
-- [ ] C3 route_by_intent 条件边，连接 slot_fill 与四策略 — 各 intent.type 正确进入对应策略节点
+- [x] C3 route_by_intent 条件边，连接 slot_fill 与四策略 — 各 intent.type 正确进入对应策略节点
   - 产物: `src/agent/edges.py`（更新）, `tests/unit/test_edges.py`
   - 验收: `pytest tests/unit/test_edges.py` 通过；5 种 intent.type→正确策略分支
 - [ ] C4 Multi-hop：Plan-and-Execute 子图（plan/execute/replan/synthesize） — 单元/集成测试 Mock RAG+LLM，验证 replan 分支
