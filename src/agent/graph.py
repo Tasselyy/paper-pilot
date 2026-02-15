@@ -3,10 +3,17 @@
 Provides ``build_main_graph()`` which assembles the full agent graph
 (nodes, edges, conditional routing) and returns a compiled graph.
 
-Design reference: PAPER_PILOT_DESIGN.md §5.1.
+When ``rag`` and ``llm`` dependencies are supplied, the *simple* strategy
+uses the real async implementation (``create_simple_strategy_node``);
+otherwise, a synchronous placeholder is used so the graph can still
+compile and invoke without external services.
+
+Design reference: PAPER_PILOT_DESIGN.md §5.1, DEV_SPEC B4.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
@@ -22,10 +29,22 @@ from src.agent.state import AgentState
 from src.agent.strategies.comparative import comparative_strategy_node
 from src.agent.strategies.exploratory import exploratory_strategy_node
 from src.agent.strategies.multi_hop import multi_hop_strategy_node
-from src.agent.strategies.simple import simple_strategy_node
+from src.agent.strategies.simple import (
+    create_simple_strategy_node,
+    simple_strategy_node,
+)
+
+if TYPE_CHECKING:
+    from langchain_core.language_models import BaseChatModel
+
+    from src.tools.tool_wrapper import RAGToolWrapper
 
 
-def build_main_graph() -> StateGraph:
+def build_main_graph(
+    *,
+    rag: RAGToolWrapper | None = None,
+    llm: BaseChatModel | None = None,
+) -> StateGraph:
     """Build and return the compiled main agent graph.
 
     The graph implements the full PaperPilot workflow::
@@ -35,16 +54,29 @@ def build_main_graph() -> StateGraph:
               → critic → [critic_gate] → save_memory → format_output → END
                                         ↘ retry_refine → route (loop)
 
+    Args:
+        rag: Optional ``RAGToolWrapper`` instance.  When provided together
+            with *llm*, the **simple** strategy node uses the real async
+            implementation (retrieve + synthesize) instead of the sync
+            placeholder.
+        llm: Optional ``BaseChatModel`` instance for answer synthesis.
+
     Returns:
         A compiled LangGraph ``StateGraph`` with ``MemorySaver`` checkpointer.
     """
     graph = StateGraph(AgentState)
 
+    # ── Resolve simple strategy node ──────────────────
+    if rag is not None and llm is not None:
+        _simple_node = create_simple_strategy_node(rag, llm)
+    else:
+        _simple_node = simple_strategy_node
+
     # ── Node registration ─────────────────────────────
     graph.add_node("load_memory", load_memory_node)
     graph.add_node("route", router_node)
     graph.add_node("slot_fill", slot_filling_node)
-    graph.add_node("simple", simple_strategy_node)
+    graph.add_node("simple", _simple_node)
     graph.add_node("multi_hop", multi_hop_strategy_node)
     graph.add_node("comparative", comparative_strategy_node)
     graph.add_node("exploratory", exploratory_strategy_node)

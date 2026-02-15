@@ -9,6 +9,7 @@ Design reference: PAPER_PILOT_DESIGN.md §4.
 
 from __future__ import annotations
 
+import operator
 import time
 from typing import Annotated, Any, Literal
 
@@ -168,8 +169,9 @@ class AgentState(BaseModel):
     current_react_step: int = Field(default=0, description="Current ReAct loop step")
     max_react_steps: int = Field(default=5, description="Maximum ReAct loop steps")
 
-    # Reasoning trace (observability)
-    reasoning_trace: list[ReasoningStep] = Field(
+    # Reasoning trace (observability) — uses ``operator.add`` reducer so
+    # trace entries from each node are *appended* rather than replaced.
+    reasoning_trace: Annotated[list[ReasoningStep], operator.add] = Field(
         default_factory=list,
         description="Step-by-step reasoning log",
     )

@@ -311,7 +311,7 @@ paper-pilot/
 - [x] B3 Simple 策略节点：检索 + 合成（Cloud LLM） — 给定 state.intent.reformulated_query，写入 draft_answer、retrieved_contexts
   - 产物: `src/agent/strategies/simple.py`, `src/prompts/strategies.py`（simple 部分）, `tests/unit/test_simple.py`
   - 验收: `pytest tests/unit/test_simple.py` 通过；Mock MCP+LLM，断言 draft_answer 非空且 retrieved_contexts 有值
-- [ ] B4 主图：load_memory → route → slot_fill → simple → critic → format_output — route/slot_fill 暂用 Cloud LLM 占位，critic 占位 pass；集成测试跑通 simple 路径
+- [x] B4 主图：load_memory → route → slot_fill → simple → critic → format_output — route/slot_fill 暂用 Cloud LLM 占位，critic 占位 pass；集成测试跑通 simple 路径
   - 产物: `src/agent/graph.py`（更新）, `src/agent/nodes/format_output.py`, `tests/integration/test_simple_path.py`
   - 验收: `pytest tests/integration/test_simple_path.py` 通过；从 START→END 完整跑通 simple 路径，final_answer 非空
 - [ ] C1 Router 节点：Cloud LLM 输出 type+confidence，写部分 Intent — 单元测试 Mock LLM，断言 intent.type 与 to_strategy()
