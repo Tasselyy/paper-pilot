@@ -335,7 +335,7 @@ paper-pilot/
 - [x] D1 Critic 节点：Cloud LLM 输出 CriticVerdict — 单元测试 Mock LLM，断言 passed/score/feedback
   - 产物: `src/agent/nodes/critic.py`, `src/prompts/critic.py`, `tests/unit/test_critic.py`
   - 验收: `pytest tests/unit/test_critic.py` 通过；passed=True 时 score≥0.7；passed=False 时 feedback 非空
-- [ ] D2 critic_gate 条件边：pass → save_memory，retry → retry_refine — 集成测试 retry 路径 state.retry_count 递增
+- [x] D2 critic_gate 条件边：pass → save_memory，retry → retry_refine — 集成测试 retry 路径 state.retry_count 递增
   - 产物: `src/agent/edges.py`（更新）, `tests/integration/test_retry_path.py`
   - 验收: `pytest tests/integration/test_retry_path.py` 通过；retry_count 从 0→1→2 后终止
 - [ ] D3 retry_refine 节点：根据 feedback 改写 question 或计划 — 单元测试断言 refinement 写入 state
