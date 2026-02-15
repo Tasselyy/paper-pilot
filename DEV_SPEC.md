@@ -302,7 +302,7 @@ paper-pilot/
 - [x] A4 主图骨架与占位节点（空实现） — build_main_graph() 可 compile，invoke 单轮不报错
   - 产物: `src/agent/graph.py`, `src/agent/nodes/` 各占位文件, `src/agent/edges.py`
   - 验收: `pytest tests/unit/test_graph_skeleton.py` 通过；graph.compile() 成功且 invoke 返回 state
-- [ ] B1 MCP Client 连接 RAG Server（stdio） — get_tools() 返回 query_knowledge_hub 等，可 ainvoke
+- [x] B1 MCP Client 连接 RAG Server（stdio） — get_tools() 返回 query_knowledge_hub 等，可 ainvoke
   - 产物: `src/tools/mcp_client.py`
   - 验收: `pytest tests/unit/test_mcp_client.py` 通过（Mock stdio 传输）
 - [ ] B2 RAGToolWrapper：search/list_collections 封装 — 单元测试 Mock MCP，断言参数与解析结果
