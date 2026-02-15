@@ -1,7 +1,13 @@
-"""Simple strategy: single retrieval + synthesis."""
+"""Simple strategy: single retrieval + synthesis.
+
+Placeholder implementation — returns a stub draft_answer.
+Real implementation with RAG retrieval is wired in task B3.
+"""
+
+from __future__ import annotations
 
 
-async def simple_strategy_node(state):
+def simple_strategy_node(state) -> dict:
     """Execute simple strategy: retrieve once, synthesize answer.
 
     Args:
@@ -10,5 +16,4 @@ async def simple_strategy_node(state):
     Returns:
         Partial state update with ``draft_answer`` and ``retrieved_contexts``.
     """
-    # Placeholder — implemented in task B3
-    return state
+    return {"draft_answer": "[simple placeholder] No retrieval performed yet."}

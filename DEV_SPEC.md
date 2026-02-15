@@ -299,7 +299,7 @@ paper-pilot/
 - [x] A3 state.py：AgentState、Intent、子类型、to_strategy() — 单元测试覆盖 Intent 映射与 State 字段
   - 产物: `src/agent/state.py`, `tests/unit/test_state.py`
   - 验收: `pytest tests/unit/test_state.py` 全部通过；覆盖 5 种 intent→strategy 映射
-- [ ] A4 主图骨架与占位节点（空实现） — build_main_graph() 可 compile，invoke 单轮不报错
+- [x] A4 主图骨架与占位节点（空实现） — build_main_graph() 可 compile，invoke 单轮不报错
   - 产物: `src/agent/graph.py`, `src/agent/nodes/` 各占位文件, `src/agent/edges.py`
   - 验收: `pytest tests/unit/test_graph_skeleton.py` 通过；graph.compile() 成功且 invoke 返回 state
 - [ ] B1 MCP Client 连接 RAG Server（stdio） — get_tools() 返回 query_knowledge_hub 等，可 ainvoke

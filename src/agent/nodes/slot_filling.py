@@ -1,14 +1,20 @@
-"""Slot Filling node: extract entities, dimensions, and reformulated query."""
+"""Slot Filling node: extract entities, dimensions, and reformulated query.
+
+Placeholder implementation — passes intent through unchanged.
+Real slot filling is wired in task C2.
+"""
+
+from __future__ import annotations
 
 
-async def slot_filling_node(state):
+def slot_filling_node(state) -> dict:
     """Fill intent slots using Cloud LLM.
 
     Args:
         state: The current AgentState.
 
     Returns:
-        Partial state update with fully populated ``intent``.
+        Partial state update (no-op placeholder).
     """
-    # Placeholder — implemented in task C2
-    return state
+    # Placeholder — real implementation in task C2
+    return {}

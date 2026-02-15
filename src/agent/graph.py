@@ -2,15 +2,97 @@
 
 Provides ``build_main_graph()`` which assembles the full agent graph
 (nodes, edges, conditional routing) and returns a compiled graph.
+
+Design reference: PAPER_PILOT_DESIGN.md §5.1.
 """
 
+from __future__ import annotations
 
-def build_main_graph():
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+
+from src.agent.edges import critic_gate, route_by_intent
+from src.agent.nodes.critic import critic_node
+from src.agent.nodes.format_output import format_output_node
+from src.agent.nodes.memory_nodes import load_memory_node, save_memory_node
+from src.agent.nodes.retry_refine import retry_refine_node
+from src.agent.nodes.router import router_node
+from src.agent.nodes.slot_filling import slot_filling_node
+from src.agent.state import AgentState
+from src.agent.strategies.comparative import comparative_strategy_node
+from src.agent.strategies.exploratory import exploratory_strategy_node
+from src.agent.strategies.multi_hop import multi_hop_strategy_node
+from src.agent.strategies.simple import simple_strategy_node
+
+
+def build_main_graph() -> StateGraph:
     """Build and return the compiled main agent graph.
 
+    The graph implements the full PaperPilot workflow::
+
+        START → load_memory → route → slot_fill
+              → [route_by_intent] → simple | multi_hop | comparative | exploratory
+              → critic → [critic_gate] → save_memory → format_output → END
+                                        ↘ retry_refine → route (loop)
+
     Returns:
-        The compiled LangGraph graph (placeholder — returns ``None``
-        until wired in task A4).
+        A compiled LangGraph ``StateGraph`` with ``MemorySaver`` checkpointer.
     """
-    # Placeholder — real implementation in task A4
-    return None
+    graph = StateGraph(AgentState)
+
+    # ── Node registration ─────────────────────────────
+    graph.add_node("load_memory", load_memory_node)
+    graph.add_node("route", router_node)
+    graph.add_node("slot_fill", slot_filling_node)
+    graph.add_node("simple", simple_strategy_node)
+    graph.add_node("multi_hop", multi_hop_strategy_node)
+    graph.add_node("comparative", comparative_strategy_node)
+    graph.add_node("exploratory", exploratory_strategy_node)
+    graph.add_node("critic", critic_node)
+    graph.add_node("retry_refine", retry_refine_node)
+    graph.add_node("save_memory", save_memory_node)
+    graph.add_node("format_output", format_output_node)
+
+    # ── Edges ─────────────────────────────────────────
+
+    # Entry: load memory → route (intent classification) → slot filling
+    graph.add_edge(START, "load_memory")
+    graph.add_edge("load_memory", "route")
+    graph.add_edge("route", "slot_fill")
+
+    # After slot filling → branch by intent strategy
+    graph.add_conditional_edges(
+        "slot_fill",
+        route_by_intent,
+        {
+            "simple": "simple",
+            "multi_hop": "multi_hop",
+            "comparative": "comparative",
+            "exploratory": "exploratory",
+        },
+    )
+
+    # All strategies → critic
+    graph.add_edge("simple", "critic")
+    graph.add_edge("multi_hop", "critic")
+    graph.add_edge("comparative", "critic")
+    graph.add_edge("exploratory", "critic")
+
+    # Critic → pass / retry
+    graph.add_conditional_edges(
+        "critic",
+        critic_gate,
+        {
+            "pass": "save_memory",
+            "retry": "retry_refine",
+        },
+    )
+
+    # Retry → back to route
+    graph.add_edge("retry_refine", "route")
+
+    # Pass → save memory → format output → END
+    graph.add_edge("save_memory", "format_output")
+    graph.add_edge("format_output", END)
+
+    return graph.compile(checkpointer=MemorySaver())

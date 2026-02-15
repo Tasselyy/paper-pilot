@@ -1,14 +1,20 @@
-"""Format output node: produce final_answer with citations."""
+"""Format output node: produce final_answer with citations.
+
+Placeholder implementation — copies draft_answer to final_answer.
+Real formatting with citations is wired in task B4.
+"""
+
+from __future__ import annotations
 
 
-async def format_output_node(state):
+def format_output_node(state) -> dict:
     """Format the draft answer into a final answer with source citations.
 
     Args:
         state: The current AgentState.
 
     Returns:
-        Partial state update with ``final_answer`` and ``sources``.
+        Partial state update with ``final_answer``.
     """
-    # Placeholder — implemented in task B4
-    return state
+    draft = state.draft_answer if hasattr(state, "draft_answer") else state.get("draft_answer", "")
+    return {"final_answer": draft or "No answer generated."}

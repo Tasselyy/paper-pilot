@@ -1,7 +1,13 @@
-"""Exploratory strategy: ReAct sub-graph (think/act/observe/synthesize)."""
+"""Exploratory strategy: ReAct sub-graph (think/act/observe/synthesize).
+
+Placeholder implementation — returns a stub draft_answer.
+Real ReAct sub-graph is wired in task C6.
+"""
+
+from __future__ import annotations
 
 
-async def exploratory_strategy_node(state):
+def exploratory_strategy_node(state) -> dict:
     """Execute exploratory strategy via ReAct loop.
 
     Args:
@@ -10,5 +16,4 @@ async def exploratory_strategy_node(state):
     Returns:
         Partial state update with ``draft_answer``.
     """
-    # Placeholder — implemented in task C6
-    return state
+    return {"draft_answer": "[exploratory placeholder] No retrieval performed yet."}

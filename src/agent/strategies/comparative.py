@@ -1,7 +1,13 @@
-"""Comparative strategy: parallel retrieval by entities/dimensions (ReWOO)."""
+"""Comparative strategy: parallel retrieval by entities/dimensions (ReWOO).
+
+Placeholder implementation — returns a stub draft_answer.
+Real parallel retrieval is wired in task C5.
+"""
+
+from __future__ import annotations
 
 
-async def comparative_strategy_node(state):
+def comparative_strategy_node(state) -> dict:
     """Execute comparative strategy with parallel retrieval.
 
     Args:
@@ -10,5 +16,4 @@ async def comparative_strategy_node(state):
     Returns:
         Partial state update with ``draft_answer``.
     """
-    # Placeholder — implemented in task C5
-    return state
+    return {"draft_answer": "[comparative placeholder] No retrieval performed yet."}

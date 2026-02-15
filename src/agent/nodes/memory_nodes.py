@@ -1,27 +1,31 @@
-"""Memory nodes: load_memory and save_memory."""
+"""Memory nodes: load_memory and save_memory.
+
+Placeholder implementations — no-op pass-through.
+Real memory logic is wired in task D4.
+"""
+
+from __future__ import annotations
 
 
-async def load_memory_node(state):
+def load_memory_node(state) -> dict:
     """Load relevant facts from long-term memory into state.
 
     Args:
         state: The current AgentState.
 
     Returns:
-        Partial state update with ``accumulated_facts``.
+        Empty dict (placeholder).
     """
-    # Placeholder — implemented in task D4
-    return state
+    return {}
 
 
-async def save_memory_node(state):
+def save_memory_node(state) -> dict:
     """Persist notable facts from the current turn to long-term memory.
 
     Args:
         state: The current AgentState.
 
     Returns:
-        Unchanged state.
+        Empty dict (placeholder).
     """
-    # Placeholder — implemented in task D4
-    return state
+    return {}
