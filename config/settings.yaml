@@ -1,0 +1,28 @@
+# Paper Pilot — default configuration
+# See DEV_SPEC §5.5 for full config reference.
+
+llm:
+  provider: openai            # openai | azure | local
+  model: gpt-4o-mini
+  temperature: 0.3
+  api_key: ${OPENAI_API_KEY}  # resolved from env at runtime
+
+mcp:
+  connections:
+    rag_server:
+      transport: stdio
+      command: python
+      args: ["-m", "rag_server"]
+
+agent:
+  max_retries: 2
+  max_react_steps: 5
+  router_model_path: null     # local LoRA path (optional)
+  critic_model_path: null     # local DPO  path (optional)
+
+memory:
+  memory_file: data/long_term_memory.jsonl
+
+tracing:
+  trace_dir: data/traces
+  trace_file: trace.jsonl

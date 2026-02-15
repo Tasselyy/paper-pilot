@@ -1,0 +1,95 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paper-pilot"
+version = "0.1.0"
+description = "Multi-strategy research Agent powered by LangGraph, with MCP-based RAG integration"
+requires-python = ">=3.10"
+readme = "README.md"
+
+dependencies = [
+    # Agent Framework
+    "langgraph>=1.0.8",
+    "langchain>=1.2.10",
+    "langchain-core>=1.2.12",
+    "langchain-openai>=1.1.9",
+    "langchain-mcp-adapters>=0.2.1",
+    # Structured Output
+    "pydantic>=2.0",
+    # Configuration
+    "pyyaml>=6.0",
+    # CLI
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+training = [
+    "transformers>=4.48.0",
+    "peft>=0.18.1",
+    "trl>=0.28.0",
+    "datasets>=2.21.0",
+    "bitsandbytes>=0.45.0",
+    "accelerate>=1.3.0",
+    "torch>=2.5.0",
+]
+local-models = [
+    "transformers>=4.48.0",
+    "bitsandbytes>=0.45.0",
+    "accelerate>=1.3.0",
+    "torch>=2.5.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "ruff>=0.9",
+    "pre-commit>=3.6",
+]
+
+# ── pytest ──────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+markers = [
+    "e2e: end-to-end tests requiring a running RAG Server",
+]
+addopts = "-v --tb=short -q"
+
+# ── ruff ────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function call in argument defaults
+    "RUF012", # mutable class attrs (Pydantic models need this)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+# ── setuptools ──────────────────────────────────────────
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

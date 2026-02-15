@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Ruff
+.ruff_cache/
+
+# Environment
+.env
+.env.local
+
+# Traces & logs
+traces/
+*.jsonl
+
+# Local models (large files)
+models/
+checkpoints/
+
+# Auto-coder generated (keep specs via sync)
+.cursor/skills/auto-coder/.spec_hash
