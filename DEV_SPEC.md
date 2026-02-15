@@ -293,7 +293,7 @@ paper-pilot/
 - [x] A1 初始化目录树与 pyproject.toml — 与 §5.2 一致，pip install -e . 可安装
   - 产物: `pyproject.toml`, `src/` 目录树（含各级 `__init__.py`）, `tests/unit/`, `tests/integration/`, `main.py`
   - 验收: `pip install -e .` 成功 → `python -c "from src.agent import graph"` 无报错
-- [ ] A2 config/settings.yaml 与加载逻辑 — 能读取 llm/mcp/agent 等配置项
+- [x] A2 config/settings.yaml 与加载逻辑 — 能读取 llm/mcp/agent 等配置项
   - 产物: `config/settings.yaml`, `src/config.py`
   - 验收: `pytest tests/unit/test_config.py` 全部通过；缺失必填项时抛 `ValueError`
 - [ ] A3 state.py：AgentState、Intent、子类型、to_strategy() — 单元测试覆盖 Intent 映射与 State 字段
