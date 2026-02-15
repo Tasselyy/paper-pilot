@@ -314,7 +314,7 @@ paper-pilot/
 - [x] B4 主图：load_memory → route → slot_fill → simple → critic → format_output — route/slot_fill 暂用 Cloud LLM 占位，critic 占位 pass；集成测试跑通 simple 路径
   - 产物: `src/agent/graph.py`（更新）, `src/agent/nodes/format_output.py`, `tests/integration/test_simple_path.py`
   - 验收: `pytest tests/integration/test_simple_path.py` 通过；从 START→END 完整跑通 simple 路径，final_answer 非空
-- [ ] C1 Router 节点：Cloud LLM 输出 type+confidence，写部分 Intent — 单元测试 Mock LLM，断言 intent.type 与 to_strategy()
+- [x] C1 Router 节点：Cloud LLM 输出 type+confidence，写部分 Intent — 单元测试 Mock LLM，断言 intent.type 与 to_strategy()
   - 产物: `src/agent/nodes/router.py`, `src/prompts/router.py`, `tests/unit/test_router.py`
   - 验收: `pytest tests/unit/test_router.py` 通过；5 种 question 各返回正确 intent.type
 - [ ] C2 Slot Filling 节点与 SlotFillingOutput、Prompt — 单元测试 Mock LLM，断言 intent 被完整填充
