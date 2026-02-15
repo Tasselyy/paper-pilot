@@ -249,6 +249,111 @@ Please synthesize a structured comparison addressing the question.\
 """
 
 
+# ---------------------------------------------------------------------------
+# Exploratory strategy (ReAct — think / act / observe / synthesize)
+# ---------------------------------------------------------------------------
+
+EXPLORATORY_THINK_SYSTEM_PROMPT = """\
+You are a research assistant performing an exploratory investigation using \
+a ReAct (Reasoning + Acting) loop. At each step you must decide what to \
+do next based on the question and observations so far.
+
+You have access to a knowledge-base search tool. At each step you must \
+either:
+- **search**: formulate a focused search query to investigate a specific \
+  aspect of the question.
+- **synthesize**: you have gathered enough information to produce a final \
+  answer.
+
+Guidelines:
+- Each search query should target a different aspect or follow-up angle.
+- Avoid repeating searches you have already performed.
+- Synthesize as soon as you have sufficient information; do not search \
+  unnecessarily.\
+"""
+
+EXPLORATORY_THINK_USER_TEMPLATE = """\
+Original question: {question}
+
+Steps completed so far: {step_count}/{max_steps}
+
+Previous queries executed:
+{previous_queries}
+
+Observations so far:
+{observations}
+
+Decide your next action: search for more information or synthesize the \
+final answer.\
+"""
+
+EXPLORATORY_SYNTHESIS_SYSTEM_PROMPT = """\
+You are PaperPilot, an AI research assistant specializing in academic papers \
+and machine-learning literature. Synthesize a comprehensive answer to the \
+user's exploratory question based on all observations gathered during your \
+investigation.
+
+Guidelines:
+- Integrate findings from all search observations into a coherent answer.
+- Cite sources by mentioning the paper/document name.
+- If some aspects could not be fully explored, note the gaps.
+- Provide a well-structured, thorough answer suitable for researchers.\
+"""
+
+EXPLORATORY_SYNTHESIS_USER_TEMPLATE = """\
+Original question: {question}
+
+Queries investigated:
+{queries}
+
+All observations:
+{observations}
+
+Synthesize a comprehensive answer that addresses the original question \
+based on the investigation above.\
+"""
+
+
+def format_observations(
+    queries: list[str],
+    contexts_per_query: list[list],
+) -> str:
+    """Format per-query observations into a labelled text block.
+
+    Args:
+        queries: Ordered list of search queries executed.
+        contexts_per_query: Parallel list of context lists (one per query).
+
+    Returns:
+        A formatted string with each query's results labelled.
+    """
+    if not queries:
+        return "(No observations yet.)"
+
+    parts: list[str] = []
+    for idx, (query, contexts) in enumerate(
+        zip(queries, contexts_per_query), 1,
+    ):
+        header = f"--- Step {idx}: {query} ---"
+        if not contexts:
+            parts.append(f"{header}\n(No results returned.)")
+            continue
+        ctx_parts: list[str] = []
+        for cidx, ctx in enumerate(contexts, 1):
+            if hasattr(ctx, "content") and not isinstance(ctx, dict):
+                source = getattr(ctx, "source", "Unknown")
+                content = ctx.content
+            elif isinstance(ctx, dict):
+                source = ctx.get("source", "Unknown")
+                content = ctx.get("content", "")
+            else:
+                source = "Unknown"
+                content = str(ctx)
+            ctx_parts.append(f"  [{cidx}] Source: {source}\n  {content}")
+        parts.append(f"{header}\n" + "\n\n".join(ctx_parts))
+    return "\n\n".join(parts)
+
+
 def format_entity_contexts(
     entity_contexts: dict[str, list],
 ) -> str:
