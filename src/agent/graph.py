@@ -26,7 +26,10 @@ from src.agent.nodes.retry_refine import retry_refine_node
 from src.agent.nodes.router import create_router_node, router_node
 from src.agent.nodes.slot_filling import create_slot_filling_node, slot_filling_node
 from src.agent.state import AgentState
-from src.agent.strategies.comparative import comparative_strategy_node
+from src.agent.strategies.comparative import (
+    comparative_strategy_node,
+    create_comparative_strategy_node,
+)
 from src.agent.strategies.exploratory import exploratory_strategy_node
 from src.agent.strategies.multi_hop import (
     create_multi_hop_strategy_node,
@@ -73,9 +76,11 @@ def build_main_graph(
     if rag is not None and llm is not None:
         _simple_node = create_simple_strategy_node(rag, llm)
         _multi_hop_node = create_multi_hop_strategy_node(rag, llm)
+        _comparative_node = create_comparative_strategy_node(rag, llm)
     else:
         _simple_node = simple_strategy_node
         _multi_hop_node = multi_hop_strategy_node
+        _comparative_node = comparative_strategy_node
 
     if llm is not None:
         _router_node = create_router_node(llm)
@@ -90,7 +95,7 @@ def build_main_graph(
     graph.add_node("slot_fill", _slot_filling_node)
     graph.add_node("simple", _simple_node)
     graph.add_node("multi_hop", _multi_hop_node)
-    graph.add_node("comparative", comparative_strategy_node)
+    graph.add_node("comparative", _comparative_node)
     graph.add_node("exploratory", exploratory_strategy_node)
     graph.add_node("critic", critic_node)
     graph.add_node("retry_refine", retry_refine_node)

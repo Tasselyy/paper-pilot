@@ -197,3 +197,90 @@ All retrieved contexts:
 Synthesize a comprehensive answer that addresses the original question \
 by connecting the findings from all sub-questions.\
 """
+
+
+# ---------------------------------------------------------------------------
+# Comparative strategy (ReWOO — parallel retrieval + structured comparison)
+# ---------------------------------------------------------------------------
+
+COMPARATIVE_EXTRACT_SYSTEM_PROMPT = """\
+You are a research assistant that extracts entities and comparison \
+dimensions from a comparative question about academic papers and \
+machine-learning techniques.
+
+Return:
+- **entities**: the items being compared (e.g. "LoRA", "QLoRA", \
+"Full Fine-tuning").
+- **dimensions**: the aspects/criteria to compare (e.g. "memory usage", \
+"accuracy", "training speed").\
+"""
+
+COMPARATIVE_EXTRACT_USER_TEMPLATE = """\
+Question: {question}
+
+Extract the entities being compared and the dimensions of comparison.\
+"""
+
+COMPARATIVE_SYNTHESIS_SYSTEM_PROMPT = """\
+You are PaperPilot, an AI research assistant specializing in academic papers \
+and machine-learning literature. You are performing a **structured comparison** \
+of multiple entities based on retrieved knowledge-base excerpts.
+
+Guidelines:
+- Organize the answer by comparing entities across the given dimensions.
+- Use a structured format (e.g., a table or dimension-by-dimension breakdown).
+- Cite sources by mentioning the paper/document name.
+- If information for a certain entity–dimension pair is not available in the \
+  retrieved contexts, state that clearly.
+- Be objective and factual; avoid speculation.\
+"""
+
+COMPARATIVE_SYNTHESIS_USER_TEMPLATE = """\
+Question: {question}
+
+Entities being compared: {entities}
+
+Comparison dimensions: {dimensions}
+
+Retrieved contexts per entity:
+{entity_contexts}
+
+Please synthesize a structured comparison addressing the question.\
+"""
+
+
+def format_entity_contexts(
+    entity_contexts: dict[str, list],
+) -> str:
+    """Format per-entity retrieved contexts into a labelled text block.
+
+    Args:
+        entity_contexts: Mapping from entity name to a list of context
+            objects (``RetrievedContext`` or dicts with ``content``/``source``).
+
+    Returns:
+        A formatted string with each entity's contexts numbered.
+    """
+    if not entity_contexts:
+        return "(No entity contexts available.)"
+
+    parts: list[str] = []
+    for entity, contexts in entity_contexts.items():
+        header = f"=== {entity} ==="
+        if not contexts:
+            parts.append(f"{header}\n(No relevant contexts retrieved.)")
+            continue
+        ctx_parts: list[str] = []
+        for idx, ctx in enumerate(contexts, 1):
+            if hasattr(ctx, "content") and not isinstance(ctx, dict):
+                source = getattr(ctx, "source", "Unknown")
+                content = ctx.content
+            elif isinstance(ctx, dict):
+                source = ctx.get("source", "Unknown")
+                content = ctx.get("content", "")
+            else:
+                source = "Unknown"
+                content = str(ctx)
+            ctx_parts.append(f"  [{idx}] Source: {source}\n  {content}")
+        parts.append(f"{header}\n" + "\n\n".join(ctx_parts))
+    return "\n\n".join(parts)

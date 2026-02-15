@@ -326,7 +326,7 @@ paper-pilot/
 - [x] C4 Multi-hop：Plan-and-Execute 子图（plan/execute/replan/synthesize） — 单元/集成测试 Mock RAG+LLM，验证 replan 分支
   - 产物: `src/agent/strategies/multi_hop.py`, `tests/unit/test_multi_hop.py`
   - 验收: `pytest tests/unit/test_multi_hop.py` 通过；plan→execute→replan 循环可终止且 draft_answer 非空
-- [ ] C5 Comparative 节点：intent.entities/dimensions 优先，并行检索 — 单元测试断言并行调用与合成
+- [x] C5 Comparative 节点：intent.entities/dimensions 优先，并行检索 — 单元测试断言并行调用与合成
   - 产物: `src/agent/strategies/comparative.py`, `tests/unit/test_comparative.py`
   - 验收: `pytest tests/unit/test_comparative.py` 通过；断言并行检索调用次数 = len(entities)
 - [ ] C6 Exploratory：ReAct 子图（think/act/observe/synthesize） — 单元测试断言步数上限与终止条件
