@@ -296,7 +296,7 @@ paper-pilot/
 - [x] A2 config/settings.yaml 与加载逻辑 — 能读取 llm/mcp/agent 等配置项
   - 产物: `config/settings.yaml`, `src/config.py`
   - 验收: `pytest tests/unit/test_config.py` 全部通过；缺失必填项时抛 `ValueError`
-- [ ] A3 state.py：AgentState、Intent、子类型、to_strategy() — 单元测试覆盖 Intent 映射与 State 字段
+- [x] A3 state.py：AgentState、Intent、子类型、to_strategy() — 单元测试覆盖 Intent 映射与 State 字段
   - 产物: `src/agent/state.py`, `tests/unit/test_state.py`
   - 验收: `pytest tests/unit/test_state.py` 全部通过；覆盖 5 种 intent→strategy 映射
 - [ ] A4 主图骨架与占位节点（空实现） — build_main_graph() 可 compile，invoke 单轮不报错
