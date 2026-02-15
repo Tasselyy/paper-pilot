@@ -350,7 +350,7 @@ paper-pilot/
 - [x] E2 JSONL Trace 落盘（tracer.py） — 可配置路径，单条记录包含 intent/strategy/critic/final_answer
   - 产物: `src/tracing/tracer.py`（更新 flush_to_jsonl）
   - 验收: `pytest tests/unit/test_tracer.py` 通过；JSONL 文件可被 `json.loads` 逐行解析
-- [ ] E3 Rich 流式输出（astream_events 或等价） — CLI 能实时打印节点名与关键输出
+- [x] E3 Rich 流式输出（astream_events 或等价） — CLI 能实时打印节点名与关键输出
   - 产物: `src/tracing/rich_output.py`
   - 验收: 手动运行 `python main.py --question "test"` 观察节点流式输出（或 Mock 测试）
 - [ ] E4 main.py CLI：输入 question，输出 final_answer + 引用 — 可配置 MCP 与 LLM，本地一键运行
