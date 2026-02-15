@@ -308,7 +308,7 @@ paper-pilot/
 - [x] B2 RAGToolWrapper：search/list_collections 封装 — 单元测试 Mock MCP，断言参数与解析结果
   - 产物: `src/tools/tool_wrapper.py`, `tests/unit/test_tool_wrapper.py`
   - 验收: `pytest tests/unit/test_tool_wrapper.py` 全部通过；断言参数归一化与错误处理
-- [ ] B3 Simple 策略节点：检索 + 合成（Cloud LLM） — 给定 state.intent.reformulated_query，写入 draft_answer、retrieved_contexts
+- [x] B3 Simple 策略节点：检索 + 合成（Cloud LLM） — 给定 state.intent.reformulated_query，写入 draft_answer、retrieved_contexts
   - 产物: `src/agent/strategies/simple.py`, `src/prompts/strategies.py`（simple 部分）, `tests/unit/test_simple.py`
   - 验收: `pytest tests/unit/test_simple.py` 通过；Mock MCP+LLM，断言 draft_answer 非空且 retrieved_contexts 有值
 - [ ] B4 主图：load_memory → route → slot_fill → simple → critic → format_output — route/slot_fill 暂用 Cloud LLM 占位，critic 占位 pass；集成测试跑通 simple 路径
