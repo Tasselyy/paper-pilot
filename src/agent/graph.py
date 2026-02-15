@@ -28,7 +28,10 @@ from src.agent.nodes.slot_filling import create_slot_filling_node, slot_filling_
 from src.agent.state import AgentState
 from src.agent.strategies.comparative import comparative_strategy_node
 from src.agent.strategies.exploratory import exploratory_strategy_node
-from src.agent.strategies.multi_hop import multi_hop_strategy_node
+from src.agent.strategies.multi_hop import (
+    create_multi_hop_strategy_node,
+    multi_hop_strategy_node,
+)
 from src.agent.strategies.simple import (
     create_simple_strategy_node,
     simple_strategy_node,
@@ -69,8 +72,10 @@ def build_main_graph(
     # ── Resolve strategy / LLM-dependent nodes ─────────
     if rag is not None and llm is not None:
         _simple_node = create_simple_strategy_node(rag, llm)
+        _multi_hop_node = create_multi_hop_strategy_node(rag, llm)
     else:
         _simple_node = simple_strategy_node
+        _multi_hop_node = multi_hop_strategy_node
 
     if llm is not None:
         _router_node = create_router_node(llm)
@@ -84,7 +89,7 @@ def build_main_graph(
     graph.add_node("route", _router_node)
     graph.add_node("slot_fill", _slot_filling_node)
     graph.add_node("simple", _simple_node)
-    graph.add_node("multi_hop", multi_hop_strategy_node)
+    graph.add_node("multi_hop", _multi_hop_node)
     graph.add_node("comparative", comparative_strategy_node)
     graph.add_node("exploratory", exploratory_strategy_node)
     graph.add_node("critic", critic_node)

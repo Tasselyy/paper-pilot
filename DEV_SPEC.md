@@ -323,7 +323,7 @@ paper-pilot/
 - [x] C3 route_by_intent 条件边，连接 slot_fill 与四策略 — 各 intent.type 正确进入对应策略节点
   - 产物: `src/agent/edges.py`（更新）, `tests/unit/test_edges.py`
   - 验收: `pytest tests/unit/test_edges.py` 通过；5 种 intent.type→正确策略分支
-- [ ] C4 Multi-hop：Plan-and-Execute 子图（plan/execute/replan/synthesize） — 单元/集成测试 Mock RAG+LLM，验证 replan 分支
+- [x] C4 Multi-hop：Plan-and-Execute 子图（plan/execute/replan/synthesize） — 单元/集成测试 Mock RAG+LLM，验证 replan 分支
   - 产物: `src/agent/strategies/multi_hop.py`, `tests/unit/test_multi_hop.py`
   - 验收: `pytest tests/unit/test_multi_hop.py` 通过；plan→execute→replan 循环可终止且 draft_answer 非空
 - [ ] C5 Comparative 节点：intent.entities/dimensions 优先，并行检索 — 单元测试断言并行调用与合成
