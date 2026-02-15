@@ -22,7 +22,7 @@ from src.agent.edges import critic_gate, route_by_intent
 from src.agent.nodes.critic import create_critic_node, critic_node
 from src.agent.nodes.format_output import format_output_node
 from src.agent.nodes.memory_nodes import load_memory_node, save_memory_node
-from src.agent.nodes.retry_refine import retry_refine_node
+from src.agent.nodes.retry_refine import create_retry_refine_node, retry_refine_node
 from src.agent.nodes.router import create_router_node, router_node
 from src.agent.nodes.slot_filling import create_slot_filling_node, slot_filling_node
 from src.agent.state import AgentState
@@ -86,10 +86,12 @@ def build_main_graph(
         _router_node = create_router_node(llm)
         _slot_filling_node = create_slot_filling_node(llm)
         _critic_node = create_critic_node(llm)
+        _retry_refine_node = create_retry_refine_node(llm)
     else:
         _router_node = router_node
         _slot_filling_node = slot_filling_node
         _critic_node = critic_node
+        _retry_refine_node = retry_refine_node
 
     # ── Node registration ─────────────────────────────
     graph.add_node("load_memory", load_memory_node)
@@ -100,7 +102,7 @@ def build_main_graph(
     graph.add_node("comparative", _comparative_node)
     graph.add_node("exploratory", exploratory_strategy_node)
     graph.add_node("critic", _critic_node)
-    graph.add_node("retry_refine", retry_refine_node)
+    graph.add_node("retry_refine", _retry_refine_node)
     graph.add_node("save_memory", save_memory_node)
     graph.add_node("format_output", format_output_node)
 

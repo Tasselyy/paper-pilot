@@ -338,7 +338,7 @@ paper-pilot/
 - [x] D2 critic_gate 条件边：pass → save_memory，retry → retry_refine — 集成测试 retry 路径 state.retry_count 递增
   - 产物: `src/agent/edges.py`（更新）, `tests/integration/test_retry_path.py`
   - 验收: `pytest tests/integration/test_retry_path.py` 通过；retry_count 从 0→1→2 后终止
-- [ ] D3 retry_refine 节点：根据 feedback 改写 question 或计划 — 单元测试断言 refinement 写入 state
+- [x] D3 retry_refine 节点：根据 feedback 改写 question 或计划 — 单元测试断言 refinement 写入 state
   - 产物: `src/agent/nodes/retry_refine.py`, `tests/unit/test_retry_refine.py`
   - 验收: `pytest tests/unit/test_retry_refine.py` 通过；断言 state.question 被更新且含 feedback 关键词
 - [ ] D4 load_memory / save_memory 节点，长期记忆 recall/memorize 接口 — 单元测试 Mock 长期记忆，断言调用与 state.accumulated_facts
