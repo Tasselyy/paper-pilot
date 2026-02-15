@@ -10,13 +10,19 @@ Verifies that:
 - Latency breakdown (router, retrieval, llm, critic) is computed from node traces.
 - Token usage is accumulated and included in the trace.
 - Edge cases: end_node without start raises ValueError, empty state produces valid trace.
+- **JSONL persistence**: ``flush_to_jsonl`` writes valid JSONL that can be parsed
+  line-by-line with ``json.loads``; records contain intent/strategy/critic/final_answer.
+- ``flush_trace_to_jsonl`` module-level helper and ``AgentTracer.flush_to_jsonl``
+  convenience wrapper produce identical results.
 
 No real API calls or external dependencies.
 """
 
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -28,7 +34,12 @@ from src.agent.state import (
     ReasoningStep,
     RetrievedContext,
 )
-from src.tracing.tracer import AgentTrace, AgentTracer, NodeTraceEntry
+from src.tracing.tracer import (
+    AgentTrace,
+    AgentTracer,
+    NodeTraceEntry,
+    flush_trace_to_jsonl,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -458,3 +469,311 @@ class TestAgentTracer:
         assert len(traces) == 1
         traces.clear()  # mutating copy
         assert len(tracer.node_traces) == 1  # internal list unaffected
+
+
+# ---------------------------------------------------------------------------
+# JSONL persistence tests (E2)
+# ---------------------------------------------------------------------------
+
+
+class TestAgentTraceToJsonlRecord:
+    """Tests for AgentTrace.to_jsonl_record()."""
+
+    def test_record_is_json_serializable(self) -> None:
+        """to_jsonl_record() returns a dict that json.dumps can handle."""
+        trace = AgentTrace(
+            question="What is LoRA?",
+            final_answer="LoRA is a fine-tuning method.",
+            strategy_executed="simple",
+        )
+        record = trace.to_jsonl_record()
+        line = json.dumps(record)
+        parsed = json.loads(line)
+        assert parsed["question"] == "What is LoRA?"
+        assert parsed["final_answer"] == "LoRA is a fine-tuning method."
+        assert parsed["strategy_executed"] == "simple"
+
+    def test_record_contains_intent_strategy_critic_answer(self) -> None:
+        """Acceptance: each JSONL record has intent/strategy/critic/final_answer."""
+        intent = Intent(
+            type="factual", confidence=0.9, reformulated_query="What is LoRA?",
+        )
+        verdict = CriticVerdict(
+            passed=True, score=8.5, completeness=0.9,
+            faithfulness=0.95, feedback="Good.",
+        )
+        trace = AgentTrace(
+            question="What is LoRA?",
+            intent=intent,
+            strategy_executed="simple",
+            critic_verdict=verdict,
+            final_answer="LoRA is a parameter-efficient fine-tuning method.",
+        )
+        record = trace.to_jsonl_record()
+        line = json.dumps(record)
+        parsed = json.loads(line)
+
+        # intent fields
+        assert parsed["intent"]["type"] == "factual"
+        assert parsed["intent"]["confidence"] == 0.9
+        # strategy
+        assert parsed["strategy_executed"] == "simple"
+        # critic
+        assert parsed["critic_verdict"]["passed"] is True
+        assert parsed["critic_verdict"]["score"] == 8.5
+        # final answer
+        assert parsed["final_answer"] == "LoRA is a parameter-efficient fine-tuning method."
+
+    def test_record_with_none_intent_and_critic(self) -> None:
+        """None fields serialize as null in JSON."""
+        trace = AgentTrace()
+        record = trace.to_jsonl_record()
+        assert record["intent"] is None
+        assert record["critic_verdict"] is None
+
+    def test_record_with_node_traces(self) -> None:
+        """Node trace entries are serialized as nested dicts."""
+        entries = [
+            NodeTraceEntry(node_name="route", duration_ms=25.0, timestamp=1000.0),
+            NodeTraceEntry(node_name="critic", duration_ms=40.0, timestamp=1001.0),
+        ]
+        trace = AgentTrace(node_traces=entries)
+        record = trace.to_jsonl_record()
+        line = json.dumps(record)
+        parsed = json.loads(line)
+        assert len(parsed["node_traces"]) == 2
+        assert parsed["node_traces"][0]["node_name"] == "route"
+        assert parsed["node_traces"][1]["node_name"] == "critic"
+
+    def test_record_with_reasoning_steps(self) -> None:
+        """Reasoning steps are serialized correctly."""
+        steps = [
+            ReasoningStep(step_type="route", content="classified as factual", timestamp=1.0),
+            ReasoningStep(step_type="action", content="RAG search", timestamp=2.0),
+        ]
+        trace = AgentTrace(reasoning_steps=steps)
+        record = trace.to_jsonl_record()
+        line = json.dumps(record)
+        parsed = json.loads(line)
+        assert len(parsed["reasoning_steps"]) == 2
+        assert parsed["reasoning_steps"][0]["step_type"] == "route"
+
+
+class TestFlushToJsonl:
+    """Tests for AgentTrace.flush_to_jsonl() — JSONL file persistence."""
+
+    def _make_full_trace(self) -> AgentTrace:
+        """Create a fully populated trace for testing."""
+        intent = Intent(
+            type="comparative", confidence=0.85,
+            entities=["BERT", "GPT"],
+            dimensions=["architecture", "training"],
+            reformulated_query="Compare BERT and GPT",
+        )
+        verdict = CriticVerdict(
+            passed=True, score=8.0, completeness=0.85,
+            faithfulness=0.9, feedback="Comprehensive comparison.",
+        )
+        return AgentTrace(
+            trace_id="test-trace-001",
+            question="Compare BERT and GPT",
+            timestamp=1700000000.0,
+            duration_ms=1200.0,
+            intent=intent,
+            strategy_executed="comparative",
+            reasoning_steps=[
+                ReasoningStep(step_type="route", content="comparative", timestamp=1.0),
+            ],
+            retrieval_queries=["BERT architecture", "GPT architecture"],
+            contexts_retrieved=5,
+            tokens_used={"input": 500, "output": 200},
+            critic_verdict=verdict,
+            retry_count=0,
+            final_answer="BERT uses bidirectional attention while GPT uses causal.",
+            node_traces=[
+                NodeTraceEntry(node_name="route", duration_ms=30.0, timestamp=1700000000.0),
+                NodeTraceEntry(node_name="comparative", duration_ms=800.0, timestamp=1700000000.03),
+                NodeTraceEntry(node_name="critic", duration_ms=50.0, timestamp=1700000000.83),
+            ],
+            router_latency_ms=30.0,
+            retrieval_latency_ms=800.0,
+            llm_latency_ms=0.0,
+            critic_latency_ms=50.0,
+        )
+
+    def test_creates_file_and_writes_valid_jsonl(self, tmp_path: Path) -> None:
+        """Flush creates the file and each line is valid JSON."""
+        trace = self._make_full_trace()
+        out = tmp_path / "traces" / "trace.jsonl"
+        result = trace.flush_to_jsonl(out)
+
+        assert result == out
+        assert out.exists()
+
+        lines = out.read_text(encoding="utf-8").strip().splitlines()
+        assert len(lines) == 1
+
+        parsed = json.loads(lines[0])
+        assert parsed["trace_id"] == "test-trace-001"
+        assert parsed["question"] == "Compare BERT and GPT"
+        assert parsed["strategy_executed"] == "comparative"
+        assert parsed["final_answer"].startswith("BERT uses bidirectional")
+
+    def test_appends_multiple_traces(self, tmp_path: Path) -> None:
+        """Multiple flushes append lines — file grows monotonically."""
+        out = tmp_path / "trace.jsonl"
+        for i in range(3):
+            trace = AgentTrace(
+                trace_id=f"trace-{i}",
+                question=f"Question {i}",
+                final_answer=f"Answer {i}",
+            )
+            trace.flush_to_jsonl(out)
+
+        lines = out.read_text(encoding="utf-8").strip().splitlines()
+        assert len(lines) == 3
+
+        for i, line in enumerate(lines):
+            record = json.loads(line)
+            assert record["trace_id"] == f"trace-{i}"
+            assert record["question"] == f"Question {i}"
+            assert record["final_answer"] == f"Answer {i}"
+
+    def test_creates_parent_directories(self, tmp_path: Path) -> None:
+        """Parent dirs are auto-created if they don't exist."""
+        out = tmp_path / "deep" / "nested" / "dir" / "trace.jsonl"
+        assert not out.parent.exists()
+
+        trace = AgentTrace(trace_id="deep-test")
+        trace.flush_to_jsonl(out)
+
+        assert out.exists()
+        parsed = json.loads(out.read_text(encoding="utf-8").strip())
+        assert parsed["trace_id"] == "deep-test"
+
+    def test_each_line_parseable_by_json_loads(self, tmp_path: Path) -> None:
+        """Acceptance: JSONL file can be parsed line-by-line with json.loads."""
+        out = tmp_path / "trace.jsonl"
+
+        # Write several traces of different complexity
+        AgentTrace(question="Q1", final_answer="A1").flush_to_jsonl(out)
+        self._make_full_trace().flush_to_jsonl(out)
+        AgentTrace().flush_to_jsonl(out)  # empty defaults
+
+        lines = out.read_text(encoding="utf-8").strip().splitlines()
+        assert len(lines) == 3
+
+        for line in lines:
+            record = json.loads(line)  # must not raise
+            assert isinstance(record, dict)
+            # Every record must have the key fields
+            assert "intent" in record
+            assert "strategy_executed" in record
+            assert "critic_verdict" in record
+            assert "final_answer" in record
+
+    def test_record_contains_all_top_level_fields(self, tmp_path: Path) -> None:
+        """Every top-level AgentTrace field appears in the JSONL record."""
+        out = tmp_path / "trace.jsonl"
+        trace = self._make_full_trace()
+        trace.flush_to_jsonl(out)
+
+        line = out.read_text(encoding="utf-8").strip()
+        record = json.loads(line)
+
+        expected_keys = {
+            "trace_id", "question", "timestamp", "duration_ms",
+            "intent", "strategy_executed", "reasoning_steps",
+            "retrieval_queries", "contexts_retrieved", "tokens_used",
+            "critic_verdict", "retry_count", "final_answer",
+            "node_traces", "router_latency_ms", "retrieval_latency_ms",
+            "llm_latency_ms", "critic_latency_ms",
+        }
+        assert expected_keys.issubset(record.keys())
+
+    def test_returns_resolved_path(self, tmp_path: Path) -> None:
+        """flush_to_jsonl returns the Path that was written."""
+        out = tmp_path / "out.jsonl"
+        trace = AgentTrace()
+        result = trace.flush_to_jsonl(out)
+        assert result == out
+        assert isinstance(result, Path)
+
+    def test_unicode_content_preserved(self, tmp_path: Path) -> None:
+        """Non-ASCII content (e.g. Chinese) is preserved in JSONL."""
+        out = tmp_path / "trace.jsonl"
+        trace = AgentTrace(
+            question="什么是 LoRA？",
+            final_answer="LoRA 是一种参数高效的微调方法。",
+        )
+        trace.flush_to_jsonl(out)
+
+        line = out.read_text(encoding="utf-8").strip()
+        record = json.loads(line)
+        assert record["question"] == "什么是 LoRA？"
+        assert "参数高效" in record["final_answer"]
+
+
+class TestFlushTraceToJsonlModuleHelper:
+    """Tests for the module-level flush_trace_to_jsonl() function."""
+
+    def test_writes_trace_to_file(self, tmp_path: Path) -> None:
+        """Module-level helper writes a valid JSONL line."""
+        out = tmp_path / "trace.jsonl"
+        trace = AgentTrace(
+            trace_id="mod-helper-001",
+            question="test question",
+            final_answer="test answer",
+        )
+        result = flush_trace_to_jsonl(trace, out)
+
+        assert result == out
+        assert out.exists()
+        record = json.loads(out.read_text(encoding="utf-8").strip())
+        assert record["trace_id"] == "mod-helper-001"
+
+    def test_returns_path(self, tmp_path: Path) -> None:
+        result = flush_trace_to_jsonl(AgentTrace(), tmp_path / "t.jsonl")
+        assert isinstance(result, Path)
+
+
+class TestAgentTracerFlushToJsonl:
+    """Tests for AgentTracer.flush_to_jsonl() convenience wrapper."""
+
+    def test_builds_and_flushes_trace(self, tmp_path: Path) -> None:
+        """AgentTracer.flush_to_jsonl combines build + write."""
+        out = tmp_path / "tracer_flush.jsonl"
+        tracer = AgentTracer(question="What is LoRA?")
+        tracer.start_node("route")
+        tracer.end_node("route", output={"type": "factual"})
+
+        state = AgentState(
+            question="What is LoRA?",
+            intent=Intent(
+                type="factual", confidence=0.9,
+                reformulated_query="What is LoRA?",
+            ),
+            final_answer="LoRA is ...",
+        )
+
+        trace = tracer.flush_to_jsonl(state, out, trace_id="tracer-flush-001")
+
+        assert isinstance(trace, AgentTrace)
+        assert trace.trace_id == "tracer-flush-001"
+        assert out.exists()
+
+        record = json.loads(out.read_text(encoding="utf-8").strip())
+        assert record["trace_id"] == "tracer-flush-001"
+        assert record["question"] == "What is LoRA?"
+        assert record["strategy_executed"] == "simple"
+        assert record["final_answer"] == "LoRA is ..."
+        assert len(record["node_traces"]) == 1
+        assert record["node_traces"][0]["node_name"] == "route"
+
+    def test_flush_returns_trace_with_duration(self, tmp_path: Path) -> None:
+        """Returned trace has positive total duration."""
+        out = tmp_path / "t.jsonl"
+        tracer = AgentTracer(question="test")
+        state = AgentState(question="test")
+        trace = tracer.flush_to_jsonl(state, out)
+        assert trace.duration_ms > 0

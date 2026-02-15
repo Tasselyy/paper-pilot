@@ -347,7 +347,7 @@ paper-pilot/
 - [x] E1 AgentTrace 结构与 reasoning_steps 写入 — 单轮运行后 state.reasoning_trace 与 Trace 文件一致
   - 产物: `src/tracing/tracer.py`（AgentTrace 类）, `tests/unit/test_tracer.py`
   - 验收: `pytest tests/unit/test_tracer.py` 通过；trace 记录包含 node_name、duration、output
-- [ ] E2 JSONL Trace 落盘（tracer.py） — 可配置路径，单条记录包含 intent/strategy/critic/final_answer
+- [x] E2 JSONL Trace 落盘（tracer.py） — 可配置路径，单条记录包含 intent/strategy/critic/final_answer
   - 产物: `src/tracing/tracer.py`（更新 flush_to_jsonl）
   - 验收: `pytest tests/unit/test_tracer.py` 通过；JSONL 文件可被 `json.loads` 逐行解析
 - [ ] E3 Rich 流式输出（astream_events 或等价） — CLI 能实时打印节点名与关键输出

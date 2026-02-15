@@ -5,13 +5,21 @@ trace for a single agent run, plus ``NodeTraceEntry`` for per-node execution
 records and ``AgentTracer`` — a stateful builder that tracks node-level
 timing during graph execution.
 
+The module also exposes ``flush_trace_to_jsonl`` for appending a single
+``AgentTrace`` record to a JSONL file.  Each line is a self-contained JSON
+object containing intent, strategy, critic verdict, final answer, and the
+full per-node trace — suitable for offline analysis and replay.
+
 Design reference: PAPER_PILOT_DESIGN.md §10.
 """
 
 from __future__ import annotations
 
+import json
+import logging
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -22,6 +30,8 @@ from src.agent.state import (
     Intent,
     ReasoningStep,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Per-node trace entry
@@ -155,6 +165,49 @@ class AgentTrace(BaseModel):
     )
     llm_latency_ms: float = Field(default=0.0, ge=0, description="Total LLM latency")
     critic_latency_ms: float = Field(default=0.0, ge=0, description="Critic latency")
+
+    # ------------------------------------------------------------------
+    # Serialization
+    # ------------------------------------------------------------------
+
+    def to_jsonl_record(self) -> dict[str, Any]:
+        """Serialize the trace to a JSON-compatible dictionary.
+
+        Uses Pydantic's ``model_dump`` with ``mode="json"`` so that all
+        nested models (Intent, CriticVerdict, ReasoningStep, etc.) are
+        recursively converted to plain dicts/lists suitable for
+        ``json.dumps``.
+
+        Returns:
+            A plain dict that can be written as a single JSONL line.
+        """
+        return self.model_dump(mode="json")
+
+    def flush_to_jsonl(self, path: str | Path) -> Path:
+        """Append this trace as a single JSON line to *path*.
+
+        Creates parent directories if they do not exist.  The file is
+        opened in **append** mode so that multiple traces accumulate in
+        a single JSONL file.
+
+        Args:
+            path: Destination JSONL file path.  Can be relative (resolved
+                against cwd) or absolute.
+
+        Returns:
+            The resolved ``Path`` that was written to.
+        """
+        resolved = Path(path)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+
+        record = self.to_jsonl_record()
+        line = json.dumps(record, ensure_ascii=False, default=str)
+
+        with resolved.open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+
+        logger.debug("Trace %s flushed to %s", self.trace_id, resolved)
+        return resolved
 
     # ------------------------------------------------------------------
     # Factory
@@ -363,3 +416,48 @@ class AgentTracer:
             node_traces=list(self._node_traces),
             tokens_used=dict(self._tokens_used),
         )
+
+    def flush_to_jsonl(
+        self,
+        state: AgentState,
+        path: str | Path,
+        *,
+        trace_id: str | None = None,
+    ) -> AgentTrace:
+        """Build the trace from *state* and append it to a JSONL file.
+
+        Convenience wrapper that combines ``build_trace`` and
+        ``AgentTrace.flush_to_jsonl`` in a single call.
+
+        Args:
+            state: The completed agent state.
+            path: Destination JSONL file path.
+            trace_id: Optional trace ID override.
+
+        Returns:
+            The finalized ``AgentTrace`` that was written.
+        """
+        trace = self.build_trace(state, trace_id=trace_id)
+        trace.flush_to_jsonl(path)
+        return trace
+
+
+# ---------------------------------------------------------------------------
+# Module-level helper
+# ---------------------------------------------------------------------------
+
+
+def flush_trace_to_jsonl(trace: AgentTrace, path: str | Path) -> Path:
+    """Append *trace* as a single JSON line to *path*.
+
+    This is a thin module-level convenience wrapper around
+    ``AgentTrace.flush_to_jsonl``.
+
+    Args:
+        trace: The ``AgentTrace`` to persist.
+        path: Destination JSONL file path.
+
+    Returns:
+        The resolved ``Path`` that was written to.
+    """
+    return trace.flush_to_jsonl(path)
