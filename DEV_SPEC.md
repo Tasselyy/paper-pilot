@@ -317,7 +317,7 @@ paper-pilot/
 - [x] C1 Router 节点：Cloud LLM 输出 type+confidence，写部分 Intent — 单元测试 Mock LLM，断言 intent.type 与 to_strategy()
   - 产物: `src/agent/nodes/router.py`, `src/prompts/router.py`, `tests/unit/test_router.py`
   - 验收: `pytest tests/unit/test_router.py` 通过；5 种 question 各返回正确 intent.type
-- [ ] C2 Slot Filling 节点与 SlotFillingOutput、Prompt — 单元测试 Mock LLM，断言 intent 被完整填充
+- [x] C2 Slot Filling 节点与 SlotFillingOutput、Prompt — 单元测试 Mock LLM，断言 intent 被完整填充
   - 产物: `src/agent/nodes/slot_filling.py`, `src/prompts/slot_filling.py`, `tests/unit/test_slot_filling.py`
   - 验收: `pytest tests/unit/test_slot_filling.py` 通过；断言 entities/dimensions/reformulated_query 均非空
 - [ ] C3 route_by_intent 条件边，连接 slot_fill 与四策略 — 各 intent.type 正确进入对应策略节点

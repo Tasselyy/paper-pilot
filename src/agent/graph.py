@@ -24,7 +24,7 @@ from src.agent.nodes.format_output import format_output_node
 from src.agent.nodes.memory_nodes import load_memory_node, save_memory_node
 from src.agent.nodes.retry_refine import retry_refine_node
 from src.agent.nodes.router import create_router_node, router_node
-from src.agent.nodes.slot_filling import slot_filling_node
+from src.agent.nodes.slot_filling import create_slot_filling_node, slot_filling_node
 from src.agent.state import AgentState
 from src.agent.strategies.comparative import comparative_strategy_node
 from src.agent.strategies.exploratory import exploratory_strategy_node
@@ -74,13 +74,15 @@ def build_main_graph(
 
     if llm is not None:
         _router_node = create_router_node(llm)
+        _slot_filling_node = create_slot_filling_node(llm)
     else:
         _router_node = router_node
+        _slot_filling_node = slot_filling_node
 
     # ── Node registration ─────────────────────────────
     graph.add_node("load_memory", load_memory_node)
     graph.add_node("route", _router_node)
-    graph.add_node("slot_fill", slot_filling_node)
+    graph.add_node("slot_fill", _slot_filling_node)
     graph.add_node("simple", _simple_node)
     graph.add_node("multi_hop", multi_hop_strategy_node)
     graph.add_node("comparative", comparative_strategy_node)
