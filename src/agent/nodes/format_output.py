@@ -33,7 +33,11 @@ def _build_sources_section(contexts: list[RetrievedContext]) -> str:
     seen: set[str] = set()
     lines: list[str] = []
     for ctx in contexts:
-        key = ctx.doc_id or ctx.source
+        # Prefer source path/title as the dedupe key. Multiple chunks from the
+        # same document can have different doc_id values, which would otherwise
+        # produce repeated entries in the final Sources section.
+        source = (ctx.source or "").strip()
+        key = source.lower() if source else (ctx.doc_id or "").strip().lower()
         if key in seen:
             continue
         seen.add(key)
@@ -69,6 +73,12 @@ def format_output_node(state: Any) -> dict[str, Any]:
         else state.get("retrieved_contexts", [])
     )
 
+    unique_sources = {
+        ((ctx.source or "").strip().lower() or (ctx.doc_id or "").strip().lower())
+        for ctx in contexts
+    }
+    unique_sources.discard("")
+
     if not draft:
         logger.warning("format_output_node: draft_answer is empty")
         final = "No answer generated."
@@ -80,15 +90,19 @@ def format_output_node(state: Any) -> dict[str, Any]:
         step_type="action",
         content=(
             f"Formatted final answer ({len(final)} chars) "
-            f"with {len(contexts)} source(s)"
+            f"with {len(unique_sources)} unique source(s)"
         ),
-        metadata={"num_sources": len(contexts)},
+        metadata={
+            "num_sources": len(contexts),
+            "num_unique_sources": len(unique_sources),
+        },
     )
 
     logger.info(
-        "format_output_node: final_answer=%d chars, sources=%d",
+        "format_output_node: final_answer=%d chars, sources=%d (unique=%d)",
         len(final),
         len(contexts),
+        len(unique_sources),
     )
 
     return {

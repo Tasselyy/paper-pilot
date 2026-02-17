@@ -30,12 +30,28 @@ import logging
 import sys
 import time
 import uuid
+import warnings
 from pathlib import Path
 from typing import Any
 
 from rich.console import Console
 
 logger = logging.getLogger(__name__)
+
+
+def _suppress_pydantic_serializer_noise() -> None:
+    """Suppress known non-actionable serializer warnings in CLI output.
+
+    LangChain structured output can attach parsed objects to transient message
+    payloads, and Pydantic may emit "Pydantic serializer warnings" while
+    serializing those internals. This is noisy but does not affect behavior.
+    """
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        module=r"pydantic\.main",
+        message=r"(?s)Pydantic serializer warnings:.*",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +367,7 @@ def main(argv: list[str] | None = None) -> None:
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
     )
+    _suppress_pydantic_serializer_noise()
 
     # Run the async agent
     final_state = asyncio.run(
