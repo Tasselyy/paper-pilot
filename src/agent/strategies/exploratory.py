@@ -167,6 +167,7 @@ async def run_exploratory_strategy(
     *,
     top_k: int = DEFAULT_TOP_K,
     max_react_steps: int = DEFAULT_MAX_REACT_STEPS,
+    collection: str | None = None,
 ) -> dict[str, Any]:
     """Execute exploratory strategy: ReAct loop (think/act/observe) -> synthesize.
 
@@ -251,7 +252,7 @@ async def run_exploratory_strategy(
             logger.warning("Empty search query from LLM — using original question")
 
         results: list[RetrievedContext] = await rag.search(
-            search_query, top_k=top_k,
+            search_query, top_k=top_k, collection=collection,
         )
 
         trace_steps.append(ReasoningStep(
@@ -333,6 +334,7 @@ def create_exploratory_strategy_node(
     *,
     top_k: int = DEFAULT_TOP_K,
     max_react_steps: int = DEFAULT_MAX_REACT_STEPS,
+    rag_default_collection: str | None = None,
 ):
     """Create an exploratory strategy node function with bound dependencies.
 
@@ -344,6 +346,7 @@ def create_exploratory_strategy_node(
         llm: Cloud LLM instance.
         top_k: Number of RAG results per search step.
         max_react_steps: Safety limit on ReAct loop iterations.
+        rag_default_collection: Optional RAG collection name to restrict search to.
 
     Returns:
         An async callable ``(state: AgentState) -> dict`` suitable for
@@ -352,7 +355,10 @@ def create_exploratory_strategy_node(
 
     async def _node(state: AgentState) -> dict[str, Any]:
         return await run_exploratory_strategy(
-            state, rag, llm, top_k=top_k, max_react_steps=max_react_steps,
+            state, rag, llm,
+            top_k=top_k,
+            max_react_steps=max_react_steps,
+            collection=rag_default_collection,
         )
 
     _node.__name__ = "exploratory_strategy_node"

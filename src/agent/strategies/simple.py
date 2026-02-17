@@ -46,6 +46,7 @@ async def run_simple_strategy(
     llm: BaseChatModel,
     *,
     top_k: int = DEFAULT_TOP_K,
+    collection: str | None = None,
 ) -> dict[str, Any]:
     """Execute the simple strategy: single retrieval + LLM synthesis.
 
@@ -79,7 +80,9 @@ async def run_simple_strategy(
     logger.info("Simple strategy: searching with query=%r (top_k=%d)", query[:80], top_k)
 
     # -- 2. Retrieve contexts via RAG ------------------------------------
-    retrieved: list[RetrievedContext] = await rag.search(query, top_k=top_k)
+    retrieved: list[RetrievedContext] = await rag.search(
+        query, top_k=top_k, collection=collection,
+    )
 
     retrieval_queries = [query]
 
@@ -150,6 +153,7 @@ def create_simple_strategy_node(
     llm: BaseChatModel,
     *,
     top_k: int = DEFAULT_TOP_K,
+    rag_default_collection: str | None = None,
 ):
     """Create a simple strategy node function with bound dependencies.
 
@@ -160,6 +164,7 @@ def create_simple_strategy_node(
         rag: RAG tool wrapper instance.
         llm: Cloud LLM instance.
         top_k: Default number of retrieval results.
+        rag_default_collection: Optional RAG collection name to restrict search to.
 
     Returns:
         An async callable ``(state: AgentState) -> dict`` suitable for
@@ -167,7 +172,9 @@ def create_simple_strategy_node(
     """
 
     async def _node(state: AgentState) -> dict[str, Any]:
-        return await run_simple_strategy(state, rag, llm, top_k=top_k)
+        return await run_simple_strategy(
+            state, rag, llm, top_k=top_k, collection=rag_default_collection,
+        )
 
     _node.__name__ = "simple_strategy_node"
     _node.__doc__ = "Simple strategy node (retrieve + synthesize)."

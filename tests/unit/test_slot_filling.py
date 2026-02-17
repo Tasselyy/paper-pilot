@@ -24,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.agent.nodes.slot_filling import (
+    ConstraintEntry,
     SlotFillingOutput,
     create_slot_filling_node,
     run_slot_filling,
@@ -71,10 +72,14 @@ def _make_mock_llm(
     Simulates ``llm.with_structured_output(SlotFillingOutput).ainvoke(...)``
     returning a ``SlotFillingOutput`` Pydantic instance.
     """
+    constraints_list = [
+        ConstraintEntry(key=k, value=v)
+        for k, v in (constraints or {}).items()
+    ]
     sf_output = SlotFillingOutput(
         entities=entities or ["LoRA"],
         dimensions=dimensions or [],
-        constraints=constraints or {},
+        constraints=constraints_list,
         reformulated_query=reformulated_query,
     )
 
@@ -104,19 +109,23 @@ class TestSlotFillingOutput:
         assert output.entities == ["LoRA"]
         assert output.reformulated_query == "What is LoRA?"
         assert output.dimensions == []
-        assert output.constraints == {}
+        assert output.constraints == []
 
     def test_full_output(self) -> None:
         """Should accept all fields populated."""
         output = SlotFillingOutput(
             entities=["LoRA", "QLoRA"],
             dimensions=["memory efficiency", "training speed"],
-            constraints={"model_scale": "7B", "time_range": "2023"},
+            constraints=[
+                ConstraintEntry(key="model_scale", value="7B"),
+                ConstraintEntry(key="time_range", value="2023"),
+            ],
             reformulated_query="Compare LoRA and QLoRA memory efficiency",
         )
         assert len(output.entities) == 2
         assert len(output.dimensions) == 2
-        assert output.constraints["model_scale"] == "7B"
+        constraints_dict = {e.key: e.value for e in output.constraints}
+        assert constraints_dict["model_scale"] == "7B"
 
     def test_empty_entities_allowed_by_model(self) -> None:
         """Pydantic model itself allows empty entities (prompt enforces >=1)."""

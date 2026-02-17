@@ -76,6 +76,14 @@ class MCPConnectionConfig(BaseModel):
         default=None,
         description="Server URL (streamable-http transport)",
     )
+    mcp_stderr: str | None = Field(
+        default=None,
+        description=(
+            "For stdio: redirect MCP subprocess stderr to avoid pipe blocking. "
+            "Use 'devnull' to discard, or a file path (e.g. 'logs/mcp_stderr.log'). "
+            "Leave unset for default (parent stderr); set to 'devnull' if the client hangs."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_transport_fields(self) -> "MCPConnectionConfig":
@@ -97,6 +105,10 @@ class MCPConfig(BaseModel):
     connections: dict[str, MCPConnectionConfig] = Field(
         ...,
         description="Named MCP server connections",
+    )
+    rag_default_collection: str | None = Field(
+        default=None,
+        description="Default RAG collection name for query_knowledge_hub; None = do not restrict",
     )
 
 

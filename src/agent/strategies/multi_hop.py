@@ -233,6 +233,7 @@ async def run_multi_hop_strategy(
     *,
     top_k: int = DEFAULT_TOP_K,
     max_plan_steps: int = DEFAULT_MAX_PLAN_STEPS,
+    collection: str | None = None,
 ) -> dict[str, Any]:
     """Execute multi-hop strategy: Plan -> Execute -> Replan loop -> Synthesize.
 
@@ -290,7 +291,9 @@ async def run_multi_hop_strategy(
 
         # Execute: RAG search for current sub-question
         logger.info("Multi-hop execute step %d/%d: %r", executed + 1, len(sub_questions), current_sub_q[:60])
-        results: list[RetrievedContext] = await rag.search(current_sub_q, top_k=top_k)
+        results: list[RetrievedContext] = await rag.search(
+            current_sub_q, top_k=top_k, collection=collection,
+        )
         all_contexts.extend(results)
         all_queries.append(current_sub_q)
 
@@ -373,6 +376,7 @@ def create_multi_hop_strategy_node(
     *,
     top_k: int = DEFAULT_TOP_K,
     max_plan_steps: int = DEFAULT_MAX_PLAN_STEPS,
+    rag_default_collection: str | None = None,
 ):
     """Create a multi-hop strategy node function with bound dependencies.
 
@@ -384,6 +388,7 @@ def create_multi_hop_strategy_node(
         llm: Cloud LLM instance.
         top_k: Number of RAG results per sub-question.
         max_plan_steps: Safety limit on execution steps.
+        rag_default_collection: Optional RAG collection name to restrict search to.
 
     Returns:
         An async callable ``(state: AgentState) -> dict`` suitable for
@@ -392,7 +397,10 @@ def create_multi_hop_strategy_node(
 
     async def _node(state: AgentState) -> dict[str, Any]:
         return await run_multi_hop_strategy(
-            state, rag, llm, top_k=top_k, max_plan_steps=max_plan_steps,
+            state, rag, llm,
+            top_k=top_k,
+            max_plan_steps=max_plan_steps,
+            collection=rag_default_collection,
         )
 
     _node.__name__ = "multi_hop_strategy_node"

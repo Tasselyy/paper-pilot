@@ -152,18 +152,89 @@ async def run_agent(
         from src.tools.mcp_client import MCPClientManager
         from src.tools.tool_wrapper import RAGToolWrapper
 
-        # Create Cloud LLM
         llm = create_llm(settings.llm)
-
-        # Connect to MCP RAG Server and wrap tools
         mcp_manager = MCPClientManager(settings.mcp)
-        mcp_tools = await mcp_manager.get_tools()
-        rag = RAGToolWrapper(mcp_tools)
+        server_names = mcp_manager.get_server_names()
+        if not server_names:
+            console.print("[red]No MCP servers configured.[/red]")
+            sys.exit(1)
+        # Keep one MCP session open for the whole run so RAG uses one process
+        # instead of spawning a new one per search (avoids ~90s cold start each time).
+        server_name = server_names[0]
         console.print(
-            f"[dim]MCP tools: {', '.join(rag.available_tools())}[/dim]"
+            f"[dim]Opening MCP session for {server_name!r} (spawn RAG process)...[/dim]"
         )
+        async with mcp_manager.session(server_name) as _mcp_session:
+            console.print("[dim]MCP session ready, loading tools...[/dim]")
+            mcp_tools = await mcp_manager.get_tools_using_session(
+                _mcp_session, server_name
+            )
+            rag = RAGToolWrapper(mcp_tools)
+            console.print(
+                f"[dim]MCP tools: {', '.join(rag.available_tools())}[/dim]"
+            )
 
-    graph = build_main_graph(rag=rag, llm=llm)
+            rag_default_collection = getattr(
+                settings.mcp, "rag_default_collection", None
+            )
+            graph = build_main_graph(
+                rag=rag,
+                llm=llm,
+                rag_default_collection=rag_default_collection,
+            )
+            thread_id = uuid.uuid4().hex[:12]
+            graph_config: dict[str, Any] = {
+                "configurable": {"thread_id": thread_id},
+            }
+            rich_output = RichStreamOutput(console=console, verbose=verbose)
+            run_start = time.time()
+            final_state = await rich_output.stream_graph(
+                graph,
+                {"question": question},
+                config=graph_config,
+            )
+            run_duration_ms = (time.time() - run_start) * 1000
+            intent = final_state.get("intent")
+            strategy = (
+                intent.to_strategy()
+                if intent is not None and hasattr(intent, "to_strategy")
+                else (str(intent) if intent is not None else "")
+            )
+            retry_count = final_state.get("retry_count", 0)
+            rich_output.display_summary(
+                strategy=strategy,
+                total_ms=run_duration_ms,
+                retry_count=retry_count,
+            )
+            trace_dir = Path(settings.tracing.trace_dir)
+            trace_file = trace_dir / settings.tracing.trace_file
+            try:
+                from src.agent.state import AgentState
+                state_obj = _build_agent_state(final_state)
+                trace = AgentTrace.from_state(
+                    state_obj,
+                    duration_ms=run_duration_ms,
+                )
+                trace.flush_to_jsonl(trace_file)
+                console.print(f"[dim]Trace saved to {trace_file}[/dim]")
+            except Exception as exc:
+                logger.warning("Failed to persist trace: %s", exc)
+                if verbose:
+                    console.print(
+                        f"[yellow]Trace persistence failed: {exc}[/yellow]"
+                    )
+            return final_state
+
+    rag_default_collection = (
+        getattr(settings.mcp, "rag_default_collection", None)
+        if settings
+        else None
+    )
+    graph = build_main_graph(
+        rag=rag,
+        llm=llm,
+        rag_default_collection=rag_default_collection,
+    )
 
     # ── Configure run ──────────────────────────────────────
     thread_id = uuid.uuid4().hex[:12]

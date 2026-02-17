@@ -8,18 +8,30 @@ llm:
   api_key: ${OPENAI_API_KEY}  # resolved from env at runtime
 
 # RAG MCP Server：独立文件夹时需指定 cwd 和 env（与 Cursor MCP 配置一致）
-# 敏感值用 ${VAR} 从 .env 读取；路径也可用 ${RAG_PROJECT_ROOT} 并在 .env 中定义
+# rag_default_collection：若 RAG 数据在指定 collection，在此填写；不填则查询时不限定
+# 若 stdio 仍卡住：可改用 streamable-http，先单独启动 RAG 服务再连（见下方注释示例）
+# mcp:
+#   rag_default_collection: null
+#   connections:
+#     rag_server:
+#       transport: stdio
+#       command: C:\code\python\MODULAR-RAG-MCP-SERVER\.venv\Scripts\python.exe
+#       args: ["-m", "src.mcp_server.server"]
+#       cwd: C:\code\python\MODULAR-RAG-MCP-SERVER
+#       mcp_stderr: devnull
+#       env:
+#         OPENAI_API_KEY: ${OPENAI_API_KEY}
+#     # 若 stdio 卡住，可改为 HTTP：先在 RAG 项目里单独启动服务，再填 url，例如：
+#     # rag_server:
+#     #   transport: streamable-http
+#     #   url: http://127.0.0.1:8000/mcp
+
 mcp:
+  rag_default_collection: essays
   connections:
     rag_server:
-      transport: stdio
-      command: C:\code\python\MODULAR-RAG-MCP-SERVER\.venv\Scripts\python.exe
-      args: ["-m", "src.mcp_server.server"]
-      cwd: C:\code\python\MODULAR-RAG-MCP-SERVER
-      env:
-        OPENAI_API_KEY: ${OPENAI_API_KEY}
-        AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
-        AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+      transport: streamable-http
+      url: http://127.0.0.1:8000/mcp
 
 agent:
   max_retries: 2

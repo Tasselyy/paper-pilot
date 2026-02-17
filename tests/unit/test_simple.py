@@ -160,7 +160,7 @@ class TestRunSimpleStrategy:
 
         # Verify RAG was called with reformulated_query
         mock_rag.search.assert_awaited_once_with(
-            "What is LoRA?", top_k=DEFAULT_TOP_K
+            "What is LoRA?", top_k=DEFAULT_TOP_K, collection=None,
         )
 
         # Verify LLM was called
@@ -206,7 +206,7 @@ class TestRunSimpleStrategy:
         await run_simple_strategy(state, mock_rag, mock_llm)
 
         mock_rag.search.assert_awaited_once_with(
-            "Explain low-rank adaptation in detail", top_k=DEFAULT_TOP_K
+            "Explain low-rank adaptation in detail", top_k=DEFAULT_TOP_K, collection=None,
         )
 
     async def test_falls_back_to_question_when_reformulated_empty(self) -> None:
@@ -219,7 +219,7 @@ class TestRunSimpleStrategy:
         await run_simple_strategy(state, mock_rag, mock_llm)
 
         mock_rag.search.assert_awaited_once_with(
-            "What is LoRA?", top_k=DEFAULT_TOP_K
+            "What is LoRA?", top_k=DEFAULT_TOP_K, collection=None,
         )
 
     async def test_llm_receives_system_and_user_messages(self) -> None:
@@ -261,7 +261,7 @@ class TestRunSimpleStrategy:
 
         await run_simple_strategy(state, mock_rag, mock_llm, top_k=10)
 
-        mock_rag.search.assert_awaited_once_with("What is LoRA?", top_k=10)
+        mock_rag.search.assert_awaited_once_with("What is LoRA?", top_k=10, collection=None)
 
     async def test_raises_when_intent_is_none(self) -> None:
         """Should raise ValueError when state.intent is None."""
@@ -305,7 +305,7 @@ class TestRunSimpleStrategy:
         result = await run_simple_strategy(state, mock_rag, mock_llm)
 
         mock_rag.search.assert_awaited_once_with(
-            "Tell me more about LoRA rank selection", top_k=DEFAULT_TOP_K
+            "Tell me more about LoRA rank selection", top_k=DEFAULT_TOP_K, collection=None,
         )
         assert result["draft_answer"]
 
@@ -341,7 +341,7 @@ class TestCreateSimpleStrategyNode:
 
         await node(state)
 
-        mock_rag.search.assert_awaited_once_with("What is LoRA?", top_k=3)
+        mock_rag.search.assert_awaited_once_with("What is LoRA?", top_k=3, collection=None)
 
     async def test_factory_node_has_correct_name(self) -> None:
         """Factory-produced node should have the expected __name__."""

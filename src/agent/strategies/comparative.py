@@ -96,6 +96,8 @@ async def _retrieve_for_entity(
     question: str,
     rag: RAGToolWrapper,
     top_k: int,
+    *,
+    collection: str | None = None,
 ) -> list[RetrievedContext]:
     """Search RAG for a single entity in the context of the question.
 
@@ -104,12 +106,13 @@ async def _retrieve_for_entity(
         question: The user's reformulated question for context.
         rag: RAG tool wrapper.
         top_k: Number of results to retrieve.
+        collection: Optional RAG collection name to restrict search to.
 
     Returns:
         A list of ``RetrievedContext`` objects for this entity.
     """
     query = f"{entity}: {question}"
-    return await rag.search(query, top_k=top_k)
+    return await rag.search(query, top_k=top_k, collection=collection)
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +126,7 @@ async def run_comparative_strategy(
     llm: BaseChatModel,
     *,
     top_k: int = DEFAULT_TOP_K,
+    collection: str | None = None,
 ) -> dict[str, Any]:
     """Execute the comparative strategy: parallel retrieval + structured comparison.
 
@@ -182,7 +186,7 @@ async def run_comparative_strategy(
 
     # -- 3. Parallel retrieval (ReWOO: no intermediate LLM calls) ----------
     retrieval_tasks = [
-        _retrieve_for_entity(entity, question, rag, top_k)
+        _retrieve_for_entity(entity, question, rag, top_k, collection=collection)
         for entity in entities
     ]
 
@@ -285,6 +289,7 @@ def create_comparative_strategy_node(
     llm: BaseChatModel,
     *,
     top_k: int = DEFAULT_TOP_K,
+    rag_default_collection: str | None = None,
 ):
     """Create a comparative strategy node function with bound dependencies.
 
@@ -295,6 +300,7 @@ def create_comparative_strategy_node(
         rag: RAG tool wrapper instance.
         llm: Cloud LLM instance.
         top_k: Default number of retrieval results per entity.
+        rag_default_collection: Optional RAG collection name to restrict search to.
 
     Returns:
         An async callable ``(state: AgentState) -> dict`` suitable for
@@ -302,7 +308,9 @@ def create_comparative_strategy_node(
     """
 
     async def _node(state: AgentState) -> dict[str, Any]:
-        return await run_comparative_strategy(state, rag, llm, top_k=top_k)
+        return await run_comparative_strategy(
+            state, rag, llm, top_k=top_k, collection=rag_default_collection,
+        )
 
     _node.__name__ = "comparative_strategy_node"
     _node.__doc__ = "Comparative strategy node (ReWOO: parallel retrieval + synthesis)."

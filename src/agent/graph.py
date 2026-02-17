@@ -30,7 +30,10 @@ from src.agent.strategies.comparative import (
     comparative_strategy_node,
     create_comparative_strategy_node,
 )
-from src.agent.strategies.exploratory import exploratory_strategy_node
+from src.agent.strategies.exploratory import (
+    create_exploratory_strategy_node,
+    exploratory_strategy_node,
+)
 from src.agent.strategies.multi_hop import (
     create_multi_hop_strategy_node,
     multi_hop_strategy_node,
@@ -50,6 +53,7 @@ def build_main_graph(
     *,
     rag: RAGToolWrapper | None = None,
     llm: BaseChatModel | None = None,
+    rag_default_collection: str | None = None,
 ) -> StateGraph:
     """Build and return the compiled main agent graph.
 
@@ -66,6 +70,8 @@ def build_main_graph(
             implementation (retrieve + synthesize) instead of the sync
             placeholder.
         llm: Optional ``BaseChatModel`` instance for answer synthesis.
+        rag_default_collection: Optional RAG collection name to restrict
+            query_knowledge_hub to; None = do not restrict.
 
     Returns:
         A compiled LangGraph ``StateGraph`` with ``MemorySaver`` checkpointer.
@@ -74,13 +80,23 @@ def build_main_graph(
 
     # ── Resolve strategy / LLM-dependent nodes ─────────
     if rag is not None and llm is not None:
-        _simple_node = create_simple_strategy_node(rag, llm)
-        _multi_hop_node = create_multi_hop_strategy_node(rag, llm)
-        _comparative_node = create_comparative_strategy_node(rag, llm)
+        _simple_node = create_simple_strategy_node(
+            rag, llm, rag_default_collection=rag_default_collection,
+        )
+        _multi_hop_node = create_multi_hop_strategy_node(
+            rag, llm, rag_default_collection=rag_default_collection,
+        )
+        _comparative_node = create_comparative_strategy_node(
+            rag, llm, rag_default_collection=rag_default_collection,
+        )
+        _exploratory_node = create_exploratory_strategy_node(
+            rag, llm, rag_default_collection=rag_default_collection,
+        )
     else:
         _simple_node = simple_strategy_node
         _multi_hop_node = multi_hop_strategy_node
         _comparative_node = comparative_strategy_node
+        _exploratory_node = exploratory_strategy_node
 
     if llm is not None:
         _router_node = create_router_node(llm)
@@ -100,7 +116,7 @@ def build_main_graph(
     graph.add_node("simple", _simple_node)
     graph.add_node("multi_hop", _multi_hop_node)
     graph.add_node("comparative", _comparative_node)
-    graph.add_node("exploratory", exploratory_strategy_node)
+    graph.add_node("exploratory", _exploratory_node)
     graph.add_node("critic", _critic_node)
     graph.add_node("retry_refine", _retry_refine_node)
     graph.add_node("save_memory", save_memory_node)

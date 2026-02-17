@@ -34,6 +34,18 @@ logger = logging.getLogger(__name__)
 # Structured output model
 # ---------------------------------------------------------------------------
 
+# List of {key, value} is used instead of dict[str, str] so that the JSON
+# schema has explicit properties; OpenAI structured output rejects nested
+# objects with only additionalProperties (see "Extra required key 'constraints'"
+# 400 error).
+
+
+class ConstraintEntry(BaseModel):
+    """Single key-value constraint for Slot Filling (schema-friendly for OpenAI)."""
+
+    key: str = Field(description="Constraint name (e.g. time_range, model_scale)")
+    value: str = Field(description="Constraint value")
+
 
 class SlotFillingOutput(BaseModel):
     """Structured output schema for the Slot Filling LLM call.
@@ -41,7 +53,7 @@ class SlotFillingOutput(BaseModel):
     Attributes:
         entities: Key entities extracted from the question.
         dimensions: Comparison dimensions (non-empty for comparative intent).
-        constraints: Implicit constraints as key-value pairs.
+        constraints: Implicit constraints as list of key-value pairs.
         reformulated_query: Rewritten query optimised for retrieval.
     """
 
@@ -52,9 +64,9 @@ class SlotFillingOutput(BaseModel):
         default_factory=list,
         description="Comparison dimensions (for comparative intent only)",
     )
-    constraints: dict[str, str] = Field(
-        default_factory=dict,
-        description="Implicit constraints (time_range, model_scale, domain, etc.)",
+    constraints: list[ConstraintEntry] = Field(
+        default_factory=list,
+        description="Implicit constraints (time_range, model_scale, domain, etc.) as key-value pairs",
     )
     reformulated_query: str = Field(
         description="Rewritten clear query optimised for retrieval",
@@ -123,12 +135,14 @@ async def run_slot_filling(
     structured_llm = llm.with_structured_output(SlotFillingOutput)
     sf_output: SlotFillingOutput = await structured_llm.ainvoke(messages)
 
+    constraints_dict = {e.key: e.value for e in sf_output.constraints}
+
     logger.info(
         "SlotFilling result: entities=%s, dimensions=%s, "
         "constraints=%s, reformulated_query=%r",
         sf_output.entities,
         sf_output.dimensions,
-        sf_output.constraints,
+        constraints_dict,
         sf_output.reformulated_query[:80],
     )
 
@@ -138,7 +152,7 @@ async def run_slot_filling(
         confidence=intent.confidence,
         entities=sf_output.entities,
         dimensions=sf_output.dimensions,
-        constraints=sf_output.constraints,
+        constraints=constraints_dict,
         reformulated_query=sf_output.reformulated_query,
     )
 
@@ -153,7 +167,7 @@ async def run_slot_filling(
         metadata={
             "entities": sf_output.entities,
             "dimensions": sf_output.dimensions,
-            "constraints": sf_output.constraints,
+            "constraints": constraints_dict,
             "reformulated_query": sf_output.reformulated_query,
         },
     )
