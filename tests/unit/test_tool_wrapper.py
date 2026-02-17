@@ -37,10 +37,17 @@ from src.tools.tool_wrapper import (
 
 
 def _make_mock_tool(name: str, return_value: Any = None) -> MagicMock:
-    """Create a mock BaseTool with given name and optional async return value."""
+    """Create a mock BaseTool with given name and optional async return value.
+
+    For query_knowledge_hub, RAGToolWrapper replaces the tool with a wrapper that
+    calls the original's _arun(), so the mock must have _arun for search() to work.
+    """
     tool = MagicMock()
     tool.name = name
-    tool.ainvoke = AsyncMock(return_value=return_value)
+    async_invoke = AsyncMock(return_value=return_value)
+    tool.ainvoke = async_invoke
+    # Wrapper for query_knowledge_hub calls _arun to avoid schema recursion
+    tool._arun = async_invoke
     return tool
 
 
@@ -92,6 +99,11 @@ class TestSafeJsonLoads:
         raw = "not valid json {{"
         assert _safe_json_loads(raw) == raw
 
+    def test_parses_markdown_fenced_json(self) -> None:
+        """JSON inside markdown fences should be extracted and parsed."""
+        raw = '```json\n{"key":"value"}\n```'
+        assert _safe_json_loads(raw) == {"key": "value"}
+
     def test_returns_none_as_is(self) -> None:
         """None should pass through unchanged."""
         assert _safe_json_loads(None) is None
@@ -141,6 +153,13 @@ class TestParseSearchResults:
         results = _parse_search_results(wrapped)
         assert len(results) == 2
 
+    def test_parse_single_result_dict(self) -> None:
+        """A single result dict should be accepted and wrapped as list."""
+        item = _sample_search_results()[0]
+        results = _parse_search_results(item)
+        assert len(results) == 1
+        assert results[0].doc_id == "doc_001"
+
     def test_empty_list(self) -> None:
         """An empty list should return an empty result."""
         assert _parse_search_results([]) == []
@@ -148,7 +167,18 @@ class TestParseSearchResults:
     def test_unexpected_type_returns_empty(self) -> None:
         """Non-list/non-dict should return empty list."""
         assert _parse_search_results(42) == []
-        assert _parse_search_results("plain text") == []
+
+    def test_plain_text_becomes_fallback_context(self) -> None:
+        """Plain text payload should be preserved as one fallback context."""
+        results = _parse_search_results("This is plain RAG text")
+        assert len(results) == 1
+        assert results[0].content == "This is plain RAG text"
+        assert results[0].source == TOOL_QUERY_KNOWLEDGE_HUB
+
+    def test_no_results_text_returns_empty(self) -> None:
+        """No-result style text should still map to empty list."""
+        results = _parse_search_results("No relevant results found for the query.")
+        assert results == []
 
     def test_alternative_key_names(self) -> None:
         """Tolerates 'title' for 'source', 'document_id' for 'doc_id', 'score' for 'relevance_score'."""
@@ -186,6 +216,53 @@ class TestParseSearchResults:
         assert ctx.doc_id == ""
         assert ctx.relevance_score == 0.0
         assert ctx.chunk_index is None
+
+    def test_parse_adapter_tuple_content_and_artifact(self) -> None:
+        """Adapter returns (content, artifact); artifact.structured_content has results."""
+        items = _sample_search_results()
+        artifact = MagicMock()
+        artifact.structured_content = {"results": items}
+        raw = ([], artifact)
+        results = _parse_search_results(raw)
+        assert len(results) == 2
+        assert results[0].doc_id == "doc_001"
+
+    def test_parse_adapter_tuple_content_text_block(self) -> None:
+        """Adapter returns (content_blocks, None); first block has JSON text."""
+        items = _sample_search_results()
+        content = [{"type": "text", "text": json.dumps(items)}]
+        raw = (content, None)
+        results = _parse_search_results(raw)
+        assert len(results) == 2
+        assert results[0].source == "LoRA: Low-Rank Adaptation"
+
+    def test_parse_streamable_http_structured_result_with_citations(self) -> None:
+        """Parse FastMCP structuredContent.result string with fenced JSON citations."""
+        raw_text = (
+            "## 检索结果\n\n"
+            "**References (JSON):**\n"
+            "```json\n"
+            "{\n"
+            '  "citations": [\n'
+            "    {\n"
+            '      "chunk_id": "doc_x_0001",\n'
+            '      "source": "paper.pdf",\n'
+            '      "score": 0.66,\n'
+            '      "text_snippet": "attention is all you need",\n'
+            '      "metadata": {"chunk_index": 1}\n'
+            "    }\n"
+            "  ],\n"
+            '  "metadata": {"collection": "default"}\n'
+            "}\n"
+            "```"
+        )
+        payload = {"result": raw_text}
+        results = _parse_search_results(payload)
+        assert len(results) == 1
+        assert results[0].doc_id == "doc_x_0001"
+        assert results[0].source == "paper.pdf"
+        assert results[0].content == "attention is all you need"
+        assert results[0].chunk_index == 1
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +397,10 @@ class TestRAGToolWrapperSearch:
 
         results = await wrapper.search("What is LoRA?", top_k=3)
 
-        tool.ainvoke.assert_awaited_once_with({"query": "What is LoRA?", "top_k": 3})
+        # Wrapper calls _arun(**params, config=..., run_manager=...)
+        tool._arun.assert_awaited_once()
+        kwargs = tool._arun.call_args.kwargs
+        assert kwargs["query"] == "What is LoRA?" and kwargs["top_k"] == 3
         assert len(results) == 2
         assert all(isinstance(r, RetrievedContext) for r in results)
 
@@ -331,10 +411,9 @@ class TestRAGToolWrapperSearch:
 
         await wrapper.search("query", top_k=5, collection="arxiv")
 
-        call_args = tool.ainvoke.call_args[0][0]
-        assert call_args["collection"] == "arxiv"
-        assert call_args["query"] == "query"
-        assert call_args["top_k"] == 5
+        tool._arun.assert_awaited_once()
+        kwargs = tool._arun.call_args.kwargs
+        assert kwargs["query"] == "query" and kwargs["top_k"] == 5 and kwargs["collection"] == "arxiv"
 
     async def test_search_without_collection_omits_key(self) -> None:
         """search() without collection should NOT include it in params."""
@@ -343,8 +422,9 @@ class TestRAGToolWrapperSearch:
 
         await wrapper.search("query")
 
-        call_args = tool.ainvoke.call_args[0][0]
-        assert "collection" not in call_args
+        tool._arun.assert_awaited_once()
+        kwargs = tool._arun.call_args.kwargs
+        assert kwargs["query"] == "query" and kwargs["top_k"] == 5 and "collection" not in kwargs or kwargs.get("collection") is None
 
     async def test_search_parses_json_string_result(self) -> None:
         """search() should handle JSON-string results from MCP."""
@@ -367,7 +447,8 @@ class TestRAGToolWrapperSearch:
     async def test_search_invocation_error_returns_empty(self) -> None:
         """search() should catch exceptions and return []."""
         tool = _make_mock_tool(TOOL_QUERY_KNOWLEDGE_HUB)
-        tool.ainvoke = AsyncMock(side_effect=RuntimeError("network error"))
+        tool._arun = AsyncMock(side_effect=RuntimeError("network error"))
+        tool.ainvoke = tool._arun
         wrapper = RAGToolWrapper([tool])
 
         results = await wrapper.search("What is LoRA?")
@@ -381,8 +462,9 @@ class TestRAGToolWrapperSearch:
 
         await wrapper.search("q")
 
-        call_args = tool.ainvoke.call_args[0][0]
-        assert call_args["top_k"] == 5
+        tool._arun.assert_awaited_once()
+        kwargs = tool._arun.call_args.kwargs
+        assert kwargs["query"] == "q" and kwargs["top_k"] == 5
 
 
 # ---------------------------------------------------------------------------
