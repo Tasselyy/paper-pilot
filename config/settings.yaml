@@ -7,12 +7,19 @@ llm:
   temperature: 0.3
   api_key: ${OPENAI_API_KEY}  # resolved from env at runtime
 
+# RAG MCP Server：独立文件夹时需指定 cwd 和 env（与 Cursor MCP 配置一致）
+# 敏感值用 ${VAR} 从 .env 读取；路径也可用 ${RAG_PROJECT_ROOT} 并在 .env 中定义
 mcp:
   connections:
     rag_server:
       transport: stdio
-      command: python
-      args: ["-m", "rag_server"]
+      command: C:\code\python\MODULAR-RAG-MCP-SERVER\.venv\Scripts\python.exe
+      args: ["-m", "src.mcp_server.server"]
+      cwd: C:\code\python\MODULAR-RAG-MCP-SERVER
+      env:
+        OPENAI_API_KEY: ${OPENAI_API_KEY}
+        AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+        AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
 
 agent:
   max_retries: 2

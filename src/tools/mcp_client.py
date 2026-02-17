@@ -11,6 +11,7 @@ Design reference: DEV_SPEC §3.2, §5.3 (tools/mcp_client.py), §7.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from langchain_core.tools import BaseTool
@@ -60,11 +61,19 @@ def _build_connection_dict(conn: MCPConnectionConfig) -> dict[str, Any]:
         )
 
     if transport == "stdio":
-        return {
+        out: dict[str, Any] = {
             "transport": transport,
             "command": conn.command,
             "args": conn.args,
         }
+        if conn.cwd:
+            out["cwd"] = conn.cwd
+        if conn.env:
+            # Merge with current env so RAG subprocess still has PATH etc.
+            env = os.environ.copy()
+            env.update(conn.env)
+            out["env"] = env
+        return out
 
     # streamable_http
     return {

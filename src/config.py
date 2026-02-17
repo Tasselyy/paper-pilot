@@ -4,6 +4,10 @@ Provides Pydantic models for each config section (llm, mcp, agent, memory,
 tracing) and a ``load_settings()`` function that reads YAML, resolves
 ``${ENV_VAR}`` placeholders from the environment, and validates the result.
 
+If a ``.env`` file exists in the project root, it is loaded automatically
+before resolving placeholders, so you can put ``OPENAI_API_KEY=sk-...`` etc.
+in ``.env`` instead of exporting in the shell.
+
 Raises ``ValueError`` when required fields are missing or invalid.
 """
 
@@ -15,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
@@ -58,6 +63,14 @@ class MCPConnectionConfig(BaseModel):
     args: list[str] = Field(
         default_factory=list,
         description="Arguments for the server command",
+    )
+    cwd: str | None = Field(
+        default=None,
+        description="Working directory for the server process (stdio); e.g. RAG project root",
+    )
+    env: dict[str, str] | None = Field(
+        default=None,
+        description="Environment variables for the server process (stdio); values support ${VAR}",
     )
     url: str | None = Field(
         default=None,
@@ -186,6 +199,10 @@ def load_settings(
 ) -> Settings:
     """Load, resolve, validate, and return application ``Settings``.
 
+    Loads ``.env`` from the project root (if present) before resolving
+    ``${VAR}`` placeholders in the YAML, so variables like ``OPENAI_API_KEY``
+    can be set in ``.env`` instead of the shell.
+
     Args:
         path: Path to the YAML configuration file.
         overrides: Optional dict merged on top of the YAML data before
@@ -198,6 +215,9 @@ def load_settings(
         FileNotFoundError: If *path* does not exist.
         ValueError: If required fields are missing or invalid.
     """
+    # Load .env from project root so ${OPENAI_API_KEY} etc. are available
+    _load_dotenv_once(path)
+
     config_path = Path(path)
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
@@ -218,6 +238,23 @@ def load_settings(
         return Settings(**resolved)
     except Exception as exc:
         raise ValueError(str(exc)) from exc
+
+
+def _load_dotenv_once(config_path: str | Path) -> None:
+    """Load .env from project root once per process.
+
+    Project root is inferred as the parent of the directory containing
+    *config_path* (e.g. when path is ``config/settings.yaml``, project root
+    is the repo root). Also tries loading from current working directory.
+    """
+    if getattr(_load_dotenv_once, "_loaded", False):
+        return
+    resolved = Path(config_path).resolve()
+    # When path is config/settings.yaml, parent is config/, parent.parent is project root
+    project_root = resolved.parent.parent
+    load_dotenv(project_root / ".env")
+    load_dotenv()  # cwd as fallback
+    _load_dotenv_once._loaded = True  # type: ignore[attr-defined]
 
 
 def _deep_merge(base: dict, override: dict) -> None:

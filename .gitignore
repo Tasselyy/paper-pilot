@@ -1,6 +1,6 @@
 # local docs
 thoughts.md
-
+docs/
 # Python
 __pycache__/
 *.py[cod]
