@@ -380,7 +380,7 @@ paper-pilot/
 - [x] G2 LoRA SFT 训练脚本（sft_router.py） — 可跑通 1 epoch，保存 adapter
   - 产物: `training/sft_router.py`
   - 验收: `python training/sft_router.py --max_steps 10` 不报错，输出 adapter 目录
-- [ ] G3 DPO 偏好对合成与 DPO 训练脚本 — 可跑通 1 epoch，保存模型
+- [x] G3 DPO 偏好对合成与 DPO 训练脚本 — 可跑通 1 epoch，保存模型
   - 产物: `training/data/generate_dpo_pairs.py`, `training/dpo_critic.py`
   - 验收: `python training/dpo_critic.py --max_steps 10` 不报错，输出模型目录
 - [ ] G4 量化导出与 LocalModelManager 集成 — 4-bit 加载，推理延迟与设计文档一致量级
