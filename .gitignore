@@ -46,6 +46,8 @@ traces/
 # Local models (large files)
 models/
 checkpoints/
+!src/models/
+!src/models/*.py
 
 # Auto-coder generated (keep specs via sync)
 .cursor/skills/auto-coder/.spec_hash
