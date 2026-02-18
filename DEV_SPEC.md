@@ -374,7 +374,7 @@ paper-pilot/
 - [x] F4 Critic 节点优先调用本地模型，Fallback Cloud LLM — 集成测试可切换
   - 产物: `src/agent/nodes/critic.py`（更新 fallback 逻辑）
   - 验收: `pytest tests/unit/test_critic.py -k fallback` 通过
-- [ ] G1 Router 训练数据合成（5 类，~800 条） — 格式符合 Alpaca/instruction-output，可加载
+- [x] G1 Router 训练数据合成（5 类，~800 条） — 格式符合 Alpaca/instruction-output，可加载
   - 产物: `training/data/generate_router_data.py`, `training/data/router_train.jsonl`
   - 验收: JSONL 可被 `datasets.load_dataset("json", ...)` 加载；5 类各 ≥100 条
 - [ ] G2 LoRA SFT 训练脚本（sft_router.py） — 可跑通 1 epoch，保存 adapter
