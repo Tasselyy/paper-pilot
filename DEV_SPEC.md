@@ -377,7 +377,7 @@ paper-pilot/
 - [x] G1 Router 训练数据合成（5 类，~800 条） — 格式符合 Alpaca/instruction-output，可加载
   - 产物: `training/data/generate_router_data.py`, `training/data/router_train.jsonl`
   - 验收: JSONL 可被 `datasets.load_dataset("json", ...)` 加载；5 类各 ≥100 条
-- [ ] G2 LoRA SFT 训练脚本（sft_router.py） — 可跑通 1 epoch，保存 adapter
+- [x] G2 LoRA SFT 训练脚本（sft_router.py） — 可跑通 1 epoch，保存 adapter
   - 产物: `training/sft_router.py`
   - 验收: `python training/sft_router.py --max_steps 10` 不报错，输出 adapter 目录
 - [ ] G3 DPO 偏好对合成与 DPO 训练脚本 — 可跑通 1 epoch，保存模型
