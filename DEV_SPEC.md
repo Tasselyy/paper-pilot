@@ -145,10 +145,16 @@ mcp:
 
 - **主图 + Fake MCP**：从 START 到 END，Fake 实现 `query_knowledge_hub` 等返回固定内容，验证 simple / comparative 两条路径的端到端 state 与 final_answer。
 - **MCP Client 集成**：在测试环境中启动 RAG Server 子进程或 Mock Server，验证 Agent 能正确发现并调用 tools、解析返回格式。
+- **长期记忆集成**：主图接入真实 LongTermMemory，多轮问答下断言第二轮能 recall 第一轮写入的事实，或 JSONL 中有对应记录。
+- **Trace 集成**：跑通一条路径后读取 trace 文件，断言 JSONL 记录包含 intent/strategy/critic/final_answer 等字段，保证可观测链路可用。
+- **配置驱动建图**：加载测试用 config → 构建 graph（可 Mock RAG/LLM）→ invoke 一次，断言 state 含预期键，验证配置与建图链不被破坏。
+- **MCP 子进程集成（可选）**：测试内启动 RAG 子进程或最小 stub → MCP Client 建连 → 调用一次 query_knowledge_hub → 断言返回可解析；可标 `@pytest.mark.slow` 或可选执行。
+- **Checkpointer / 多会话（可选）**：同一 thread_id 多轮 invoke 断言状态累积，不同 thread_id 断言隔离；在实现多轮对话或会话隔离时补充。
 
 ### 4.4 端到端（可选）
 
 - 依赖已运行的 RAG Server 与灌入的测试文档；执行若干条真实问题，检查意图分类、检索调用次数、最终回答与引用是否符合预期；可标记为 `@pytest.mark.e2e` 并在 CI 中可选执行。
+- **CLI 冒烟**：自动化执行 `main.py --question ... --dry-run`（或指定测试 config），断言 exit 0 且输出中含 final_answer 与 sources 结构，将 E4 验收从手动改为可回归。
 
 ---
 
@@ -356,10 +362,10 @@ paper-pilot/
 - [x] E4 main.py CLI：输入 question，输出 final_answer + 引用 — 可配置 MCP 与 LLM，本地一键运行
   - 产物: `main.py`（更新）
   - 验收: `python main.py --question "What is LoRA?" --dry-run` 输出 final_answer 与 sources
-- [ ] F1 LocalModelManager：Router 4-bit 加载与 classify_question — 无 GPU 时跳过或 Mock；有 GPU 时返回 (IntentType, confidence)
+- [x] F1 LocalModelManager：Router 4-bit 加载与 classify_question — 无 GPU 时跳过或 Mock；有 GPU 时返回 (IntentType, confidence)
   - 产物: `src/models/loader.py`, `src/models/inference.py`, `tests/unit/test_local_model.py`
   - 验收: `pytest tests/unit/test_local_model.py` 通过（无 GPU 时标记 `@pytest.mark.skipif`）
-- [ ] F2 Router 节点优先调用本地模型，Fallback Cloud LLM — 集成测试可切换本地/Cloud
+- [x] F2 Router 节点优先调用本地模型，Fallback Cloud LLM — 集成测试可切换本地/Cloud
   - 产物: `src/agent/nodes/router.py`（更新 fallback 逻辑）
   - 验收: `pytest tests/unit/test_router.py -k fallback` 通过
 - [ ] F3 Critic 本地 DPO 模型加载与 evaluate — 同上，Fallback 逻辑
@@ -392,6 +398,24 @@ paper-pilot/
 - [ ] H4 面试 Demo 脚本（3～4 个问题对应 4 种模式） — 文档或脚本内注明每个问题的预期策略与亮点
   - 产物: `scripts/demo.py` 或 `docs/DEMO.md`
   - 验收: 4 个问题各触发对应策略，输出含 strategy 标签
+- [ ] H5 长期记忆集成/端到端 — 主图接入 LongTermMemory + create_load_memory_node/create_save_memory_node，多轮问答断言第二轮 accumulated_facts 或 JSONL 含第一轮写入事实
+  - 产物: `tests/integration/test_memory_e2e.py`（或扩展现有 integration）
+  - 验收: pytest 通过；两轮问答后 recall 能返回首轮 memorize 的事实
+- [ ] H6 CLI 冒烟自动化 — 用 pytest 或子进程执行 main.py --question "..." --dry-run（或测试 config），断言 exit 0 且 stdout/返回含 final_answer 与 sources
+  - 产物: `tests/integration/test_cli_smoke.py` 或 `tests/e2e/test_cli_smoke.py`
+  - 验收: 无需手动跑 main.py 即可在 CI 中回归 CLI 行为
+- [ ] H7 Trace 集成 — 跑通 simple 路径后读取配置的 trace 文件，断言至少一条 JSONL 记录且含 intent/strategy/critic/final_answer
+  - 产物: `tests/integration/test_trace_integration.py`
+  - 验收: pytest 通过；trace 落盘格式与字段符合预期
+- [ ] H8 配置驱动建图集成（可选） — 加载测试用 settings 或 fixture yaml，build_main_graph 后 invoke 一次，断言 state 含 final_answer 或预期键
+  - 产物: `tests/integration/test_config_graph.py`
+  - 验收: 配置或建图方式变更时自动化发现断裂
+- [ ] H9 MCP 子进程集成（可选） — 测试内启动 RAG Server 子进程或最小 stub，MCP Client 建连后调用 query_knowledge_hub 一次，断言返回可解析；可标 @pytest.mark.slow
+  - 产物: `tests/integration/test_mcp_subprocess.py`
+  - 验收: 不依赖人工启动 RAG 即可验证 MCP 连接与工具调用
+- [ ] H10 Checkpointer 多会话（可选） — 同一 thread_id 连续 invoke 两次断言状态累积，或两 thread_id 各 invoke 一次断言隔离；可在实现多轮对话时补充
+  - 产物: `tests/integration/test_checkpointer_sessions.py`
+  - 验收: 短期记忆/会话隔离行为符合预期
 
 ---
 
@@ -406,8 +430,8 @@ paper-pilot/
 | E | 4 | 0 | 0% |
 | F | 4 | 0 | 0% |
 | G | 4 | 0 | 0% |
-| H | 4 | 0 | 0% |
-| **总计** | **34** | **0** | **0%** |
+| H | 10 | 0 | 0% |
+| **总计** | **40** | **0** | **0%** |
 
 ---
 

@@ -15,7 +15,7 @@ Design reference: PAPER_PILOT_DESIGN.md §6.1, DEV_SPEC C1.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Protocol
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -25,6 +25,13 @@ from src.agent.state import Intent, IntentType, ReasoningStep
 from src.prompts.router import ROUTER_SYSTEM_PROMPT, ROUTER_USER_TEMPLATE
 
 logger = logging.getLogger(__name__)
+
+
+class LocalRouterClassifier(Protocol):
+    """Protocol for local Router inference providers."""
+
+    def classify_question(self, question: str) -> tuple[IntentType, float]:
+        """Return ``(intent_type, confidence)`` for a question."""
 
 # ---------------------------------------------------------------------------
 # Structured output model
@@ -54,16 +61,21 @@ class RouterOutput(BaseModel):
 
 async def run_router(
     state: Any,
-    llm: BaseChatModel,
+    llm: BaseChatModel | None,
+    local_router: LocalRouterClassifier | None = None,
 ) -> dict[str, Any]:
-    """Classify the user question into an intent type via Cloud LLM.
+    """Classify the user question into an intent type.
 
-    Uses ``llm.with_structured_output(RouterOutput)`` to reliably extract
-    the intent type and confidence from the LLM response.
+    The node prefers a local Router model when ``local_router`` is provided.
+    If local inference fails, it gracefully falls back to Cloud LLM
+    structured output. If neither local nor cloud is available, the node
+    returns a deterministic factual default.
 
     Args:
         state: The current AgentState (dict-like or object).
-        llm: Cloud LLM instance supporting ``with_structured_output``.
+        llm: Optional Cloud LLM instance supporting
+            ``with_structured_output``.
+        local_router: Optional local Router inference provider.
 
     Returns:
         Partial state update dict with ``intent`` (partial — only ``type``
@@ -92,6 +104,80 @@ async def run_router(
         }
 
     logger.info("Router: classifying question=%r", question[:80])
+
+    intent_type: IntentType
+    confidence: float
+    source = "cloud"
+
+    if local_router is not None:
+        try:
+            local_intent_type, local_confidence = local_router.classify_question(question)
+            validated = RouterOutput(type=local_intent_type, confidence=local_confidence)
+            intent_type = validated.type
+            confidence = validated.confidence
+            source = "local"
+        except Exception as exc:
+            logger.warning(
+                "Router local classification failed, falling back to cloud: %s",
+                exc,
+            )
+            source = "cloud_fallback"
+        else:
+            logger.info(
+                "Router result(local): type=%s, confidence=%.2f",
+                intent_type,
+                confidence,
+            )
+            intent = Intent(
+                type=intent_type,
+                confidence=confidence,
+                reformulated_query=question,
+            )
+            trace_step = ReasoningStep(
+                step_type="route",
+                content=(
+                    f"Router classified question as '{intent_type}' "
+                    f"(confidence={confidence:.2f})"
+                ),
+                metadata={
+                    "intent_type": intent_type,
+                    "confidence": confidence,
+                    "question_preview": question[:100],
+                    "source": source,
+                },
+            )
+            return {
+                "intent": intent,
+                "reasoning_trace": [trace_step],
+            }
+
+    if llm is None:
+        logger.warning(
+            "Router has no cloud LLM available — defaulting to factual "
+            "(confidence=0.5)"
+        )
+        intent = Intent(
+            type="factual",
+            confidence=0.5,
+            reformulated_query=question,
+        )
+        trace_step = ReasoningStep(
+            step_type="route",
+            content=(
+                "Router defaulted to factual because no local/cloud model "
+                "was available (confidence=0.50)"
+            ),
+            metadata={
+                "intent_type": "factual",
+                "confidence": 0.5,
+                "question_preview": question[:100],
+                "source": "default_no_model",
+            },
+        )
+        return {
+            "intent": intent,
+            "reasoning_trace": [trace_step],
+        }
 
     # -- Build messages ---
     user_prompt = ROUTER_USER_TEMPLATE.format(question=question)
@@ -130,6 +216,7 @@ async def run_router(
             "intent_type": intent_type,
             "confidence": confidence,
             "question_preview": question[:100],
+            "source": source,
         },
     )
 
@@ -144,14 +231,19 @@ async def run_router(
 # ---------------------------------------------------------------------------
 
 
-def create_router_node(llm: BaseChatModel):
+def create_router_node(
+    llm: BaseChatModel | None,
+    *,
+    local_router: LocalRouterClassifier | None = None,
+):
     """Create a Router node function with a bound LLM dependency.
 
     Use this factory when wiring the node into the LangGraph graph with
     a real or test LLM instance.
 
     Args:
-        llm: Cloud LLM instance.
+        llm: Optional Cloud LLM instance.
+        local_router: Optional local Router classifier.
 
     Returns:
         An async callable ``(state) -> dict`` suitable for
@@ -159,7 +251,7 @@ def create_router_node(llm: BaseChatModel):
     """
 
     async def _node(state: Any) -> dict[str, Any]:
-        return await run_router(state, llm)
+        return await run_router(state, llm, local_router=local_router)
 
     _node.__name__ = "router_node"
     _node.__doc__ = "Router node (intent classification via Cloud LLM)."

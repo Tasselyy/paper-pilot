@@ -62,6 +62,29 @@ def _make_mock_llm(
     return llm
 
 
+class _MockLocalRouter:
+    """Simple local router stub for fallback tests."""
+
+    def __init__(
+        self,
+        *,
+        intent_type: str = "factual",
+        confidence: float = 0.8,
+        should_raise: bool = False,
+    ) -> None:
+        self.intent_type = intent_type
+        self.confidence = confidence
+        self.should_raise = should_raise
+        self.calls: list[str] = []
+
+    def classify_question(self, question: str) -> tuple[str, float]:
+        """Return a deterministic local classification or raise."""
+        self.calls.append(question)
+        if self.should_raise:
+            raise RuntimeError("local router unavailable")
+        return self.intent_type, self.confidence
+
+
 # ---------------------------------------------------------------------------
 # RouterOutput model
 # ---------------------------------------------------------------------------
@@ -260,6 +283,47 @@ class TestRunRouter:
         intent = result["intent"]
         assert intent.type == "factual"
         assert intent.confidence == 0.93
+
+    async def test_fallback_local_router_preferred_when_available(self) -> None:
+        """Local router result should be used when local inference succeeds."""
+        state = _make_state(question="What are recent PEFT trends?")
+        mock_llm = _make_mock_llm("factual", 0.11)
+        local_router = _MockLocalRouter(intent_type="exploratory", confidence=0.84)
+
+        result = await run_router(state, mock_llm, local_router=local_router)
+
+        intent = result["intent"]
+        assert intent.type == "exploratory"
+        assert intent.confidence == 0.84
+        assert local_router.calls == ["What are recent PEFT trends?"]
+        mock_llm.with_structured_output.assert_not_called()
+        assert result["reasoning_trace"][0].metadata["source"] == "local"
+
+    async def test_fallback_to_cloud_when_local_router_fails(self) -> None:
+        """Router should fall back to cloud classification on local errors."""
+        state = _make_state(question="Compare LoRA and adapters")
+        mock_llm = _make_mock_llm("comparative", 0.91)
+        local_router = _MockLocalRouter(should_raise=True)
+
+        result = await run_router(state, mock_llm, local_router=local_router)
+
+        intent = result["intent"]
+        assert intent.type == "comparative"
+        assert intent.confidence == 0.91
+        assert local_router.calls == ["Compare LoRA and adapters"]
+        mock_llm.with_structured_output.assert_called_once_with(RouterOutput)
+        assert result["reasoning_trace"][0].metadata["source"] == "cloud_fallback"
+
+    async def test_fallback_default_when_no_local_and_no_cloud(self) -> None:
+        """Router should return deterministic default when no model is available."""
+        state = _make_state(question="Any question")
+
+        result = await run_router(state, llm=None, local_router=None)
+
+        intent = result["intent"]
+        assert intent.type == "factual"
+        assert intent.confidence == 0.5
+        assert result["reasoning_trace"][0].metadata["source"] == "default_no_model"
 
 
 # ---------------------------------------------------------------------------
