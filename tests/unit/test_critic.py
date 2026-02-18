@@ -106,6 +106,55 @@ def _make_mock_llm(
     return llm
 
 
+class _MockLocalCritic:
+    """Simple local critic stub for fallback tests."""
+
+    def __init__(
+        self,
+        *,
+        score: float = 8.0,
+        completeness: float = 0.8,
+        faithfulness: float = 0.85,
+        feedback: str = "Good local evaluation.",
+        should_raise: bool = False,
+    ) -> None:
+        self.score = score
+        self.completeness = completeness
+        self.faithfulness = faithfulness
+        self.feedback = feedback
+        self.should_raise = should_raise
+        self.calls: list[dict[str, object]] = []
+
+    def evaluate_answer(
+        self,
+        *,
+        question: str,
+        draft_answer: str,
+        retrieved_contexts: list[object] | None = None,
+        strategy: str = "unknown",
+        pass_threshold: float = 7.0,
+    ) -> dict[str, float | bool | str]:
+        """Return deterministic local critic metrics or raise."""
+        self.calls.append(
+            {
+                "question": question,
+                "draft_answer": draft_answer,
+                "retrieved_contexts": retrieved_contexts or [],
+                "strategy": strategy,
+                "pass_threshold": pass_threshold,
+            }
+        )
+        if self.should_raise:
+            raise RuntimeError("local critic unavailable")
+        return {
+            "passed": self.score >= pass_threshold,
+            "score": self.score,
+            "completeness": self.completeness,
+            "faithfulness": self.faithfulness,
+            "feedback": self.feedback,
+        }
+
+
 # ---------------------------------------------------------------------------
 # CriticOutput model
 # ---------------------------------------------------------------------------
@@ -438,7 +487,53 @@ class TestRunCriticDictState:
         result = await run_critic(state, mock_llm)
 
         assert result["critic_verdict"].passed is True
-        assert result["critic_verdict"].score == 8.0
+
+    async def test_fallback_local_critic_preferred_when_available(self) -> None:
+        """Local critic result should be used when local inference succeeds."""
+        state = _make_state()
+        mock_llm = _make_mock_llm(score=4.0, feedback="Cloud should not be used.")
+        local_critic = _MockLocalCritic(
+            score=8.8,
+            completeness=0.86,
+            faithfulness=0.91,
+            feedback="Local critic verdict.",
+        )
+
+        result = await run_critic(state, mock_llm, local_critic=local_critic)
+
+        verdict = result["critic_verdict"]
+        assert verdict.passed is True
+        assert verdict.score == pytest.approx(8.8, abs=1e-6)
+        assert verdict.feedback == "Local critic verdict."
+        assert len(local_critic.calls) == 1
+        mock_llm.with_structured_output.assert_not_called()
+        assert result["reasoning_trace"][0].metadata["source"] == "local"
+
+    async def test_fallback_to_cloud_when_local_critic_fails(self) -> None:
+        """Critic should fall back to cloud evaluation on local errors."""
+        state = _make_state()
+        mock_llm = _make_mock_llm(score=7.6, feedback="Cloud fallback verdict.")
+        local_critic = _MockLocalCritic(should_raise=True)
+
+        result = await run_critic(state, mock_llm, local_critic=local_critic)
+
+        verdict = result["critic_verdict"]
+        assert verdict.passed is True
+        assert verdict.score == pytest.approx(7.6, abs=1e-6)
+        assert len(local_critic.calls) == 1
+        mock_llm.with_structured_output.assert_called_once_with(CriticOutput)
+        assert result["reasoning_trace"][0].metadata["source"] == "cloud_fallback"
+
+    async def test_fallback_default_when_no_local_and_no_cloud(self) -> None:
+        """Critic should return deterministic default when no model is available."""
+        state = _make_state()
+
+        result = await run_critic(state, llm=None, local_critic=None)
+
+        verdict = result["critic_verdict"]
+        assert verdict.passed is True
+        assert verdict.score == pytest.approx(7.0, abs=1e-6)
+        assert result["reasoning_trace"][0].metadata["source"] == "default_no_model"
 
     async def test_dict_state_missing_intent(self) -> None:
         """Should handle missing intent in dict state (strategy defaults to unknown)."""

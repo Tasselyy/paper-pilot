@@ -16,7 +16,7 @@ Design reference: PAPER_PILOT_DESIGN.md §6.7, DEV_SPEC D1.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Protocol
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -27,6 +27,21 @@ from src.prompts.critic import CRITIC_SYSTEM_PROMPT, CRITIC_USER_TEMPLATE
 from src.prompts.strategies import format_retrieved_contexts
 
 logger = logging.getLogger(__name__)
+
+class LocalCriticEvaluator(Protocol):
+    """Protocol for local Critic inference providers."""
+
+    def evaluate_answer(
+        self,
+        *,
+        question: str,
+        draft_answer: str,
+        retrieved_contexts: list[Any] | None = None,
+        strategy: str = "unknown",
+        pass_threshold: float = 7.0,
+    ) -> dict[str, float | bool | str]:
+        """Return quality metrics for the current draft answer."""
+
 
 # ---------------------------------------------------------------------------
 # Structured output model
@@ -90,17 +105,21 @@ def _derive_passed(score: float) -> bool:
 
 async def run_critic(
     state: Any,
-    llm: BaseChatModel,
+    llm: BaseChatModel | None,
+    local_critic: LocalCriticEvaluator | None = None,
 ) -> dict[str, Any]:
     """Evaluate the draft answer via Cloud LLM structured output.
 
     Reads the question, draft_answer, retrieved_contexts, and intent from
-    *state*, invokes the LLM to produce quality scores and feedback, then
-    returns a ``CriticVerdict`` packaged in a partial state update dict.
+    *state*. The node prefers local Critic inference when ``local_critic`` is
+    provided. If local inference fails, it falls back to Cloud LLM structured
+    output. If neither local nor cloud is available, a deterministic default
+    verdict is returned.
 
     Args:
         state: The current AgentState (dict-like or object).
-        llm: Cloud LLM instance supporting ``with_structured_output``.
+        llm: Optional Cloud LLM instance supporting ``with_structured_output``.
+        local_critic: Optional local Critic inference provider.
 
     Returns:
         Partial state update dict with ``critic_verdict`` and
@@ -143,6 +162,114 @@ async def run_critic(
         question[:80],
     )
 
+    source = "cloud"
+    score: float
+    completeness: float
+    faithfulness: float
+    feedback: str
+
+    if local_critic is not None:
+        try:
+            local_result = local_critic.evaluate_answer(
+                question=question,
+                draft_answer=draft_answer,
+                retrieved_contexts=retrieved_contexts,
+                strategy=strategy,
+                pass_threshold=CRITIC_PASS_THRESHOLD,
+            )
+            local_output = CriticOutput(
+                score=float(local_result.get("score", 5.0)),
+                completeness=float(local_result.get("completeness", 0.5)),
+                faithfulness=float(local_result.get("faithfulness", 0.5)),
+                feedback=str(
+                    local_result.get(
+                        "feedback",
+                        "Local critic did not provide feedback.",
+                    )
+                ),
+            )
+            score = local_output.score
+            completeness = local_output.completeness
+            faithfulness = local_output.faithfulness
+            feedback = local_output.feedback
+            source = "local"
+        except Exception as exc:
+            logger.warning(
+                "Critic local evaluation failed, falling back to cloud: %s",
+                exc,
+            )
+            source = "cloud_fallback"
+        else:
+            passed = _derive_passed(score)
+            logger.info(
+                "Critic result(local): score=%.1f, completeness=%.2f, "
+                "faithfulness=%.2f, passed=%s",
+                score,
+                completeness,
+                faithfulness,
+                passed,
+            )
+            verdict = CriticVerdict(
+                passed=passed,
+                score=score,
+                completeness=completeness,
+                faithfulness=faithfulness,
+                feedback=feedback,
+            )
+            trace_step = ReasoningStep(
+                step_type="critique",
+                content=(
+                    f"Critic evaluated draft: score={score:.1f}, "
+                    f"completeness={completeness:.2f}, "
+                    f"faithfulness={faithfulness:.2f}, "
+                    f"passed={passed}"
+                ),
+                metadata={
+                    "score": score,
+                    "completeness": completeness,
+                    "faithfulness": faithfulness,
+                    "passed": passed,
+                    "feedback_preview": feedback[:200],
+                    "source": source,
+                },
+            )
+            return {
+                "critic_verdict": verdict,
+                "reasoning_trace": [trace_step],
+            }
+
+    if llm is None:
+        logger.warning(
+            "Critic has no local/cloud model available — returning deterministic "
+            "fallback verdict"
+        )
+        verdict = CriticVerdict(
+            passed=True,
+            score=7.0,
+            completeness=0.8,
+            faithfulness=0.9,
+            feedback="Fallback verdict — no local/cloud critic model available.",
+        )
+        trace_step = ReasoningStep(
+            step_type="critique",
+            content=(
+                "Critic returned fallback verdict because no local/cloud model "
+                "was available (score=7.0)"
+            ),
+            metadata={
+                "score": 7.0,
+                "completeness": 0.8,
+                "faithfulness": 0.9,
+                "passed": True,
+                "feedback_preview": verdict.feedback[:200],
+                "source": "default_no_model",
+            },
+        )
+        return {
+            "critic_verdict": verdict,
+            "reasoning_trace": [trace_step],
+        }
+
     # -- Format contexts for prompt -----------------------------------------
     contexts_text = format_retrieved_contexts(retrieved_contexts)
 
@@ -162,40 +289,45 @@ async def run_critic(
     structured_llm = llm.with_structured_output(CriticOutput)
     critic_output: CriticOutput = await structured_llm.ainvoke(messages)
 
-    passed = _derive_passed(critic_output.score)
+    score = critic_output.score
+    completeness = critic_output.completeness
+    faithfulness = critic_output.faithfulness
+    feedback = critic_output.feedback
+    passed = _derive_passed(score)
 
     logger.info(
         "Critic result: score=%.1f, completeness=%.2f, faithfulness=%.2f, "
         "passed=%s",
-        critic_output.score,
-        critic_output.completeness,
-        critic_output.faithfulness,
+        score,
+        completeness,
+        faithfulness,
         passed,
     )
 
     # -- Build CriticVerdict ------------------------------------------------
     verdict = CriticVerdict(
         passed=passed,
-        score=critic_output.score,
-        completeness=critic_output.completeness,
-        faithfulness=critic_output.faithfulness,
-        feedback=critic_output.feedback,
+        score=score,
+        completeness=completeness,
+        faithfulness=faithfulness,
+        feedback=feedback,
     )
 
     trace_step = ReasoningStep(
         step_type="critique",
         content=(
-            f"Critic evaluated draft: score={critic_output.score:.1f}, "
-            f"completeness={critic_output.completeness:.2f}, "
-            f"faithfulness={critic_output.faithfulness:.2f}, "
+            f"Critic evaluated draft: score={score:.1f}, "
+            f"completeness={completeness:.2f}, "
+            f"faithfulness={faithfulness:.2f}, "
             f"passed={passed}"
         ),
         metadata={
-            "score": critic_output.score,
-            "completeness": critic_output.completeness,
-            "faithfulness": critic_output.faithfulness,
+            "score": score,
+            "completeness": completeness,
+            "faithfulness": faithfulness,
             "passed": passed,
-            "feedback_preview": critic_output.feedback[:200],
+            "feedback_preview": feedback[:200],
+            "source": source,
         },
     )
 
@@ -210,14 +342,19 @@ async def run_critic(
 # ---------------------------------------------------------------------------
 
 
-def create_critic_node(llm: BaseChatModel):
+def create_critic_node(
+    llm: BaseChatModel | None,
+    *,
+    local_critic: LocalCriticEvaluator | None = None,
+):
     """Create a Critic node function with a bound LLM dependency.
 
     Use this factory when wiring the node into the LangGraph graph with
     a real or test LLM instance.
 
     Args:
-        llm: Cloud LLM instance.
+        llm: Optional Cloud LLM instance.
+        local_critic: Optional local Critic evaluator.
 
     Returns:
         An async callable ``(state) -> dict`` suitable for
@@ -225,7 +362,7 @@ def create_critic_node(llm: BaseChatModel):
     """
 
     async def _node(state: Any) -> dict[str, Any]:
-        return await run_critic(state, llm)
+        return await run_critic(state, llm, local_critic=local_critic)
 
     _node.__name__ = "critic_node"
     _node.__doc__ = "Critic node (answer quality evaluation via Cloud LLM)."

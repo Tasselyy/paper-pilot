@@ -371,7 +371,7 @@ paper-pilot/
 - [x] F3 Critic 本地 DPO 模型加载与 evaluate — 同上，Fallback 逻辑
   - 产物: `src/models/inference.py`（更新 critic 推理）
   - 验收: `pytest tests/unit/test_local_model.py -k critic` 通过
-- [ ] F4 Critic 节点优先调用本地模型，Fallback Cloud LLM — 集成测试可切换
+- [x] F4 Critic 节点优先调用本地模型，Fallback Cloud LLM — 集成测试可切换
   - 产物: `src/agent/nodes/critic.py`（更新 fallback 逻辑）
   - 验收: `pytest tests/unit/test_critic.py -k fallback` 通过
 - [ ] G1 Router 训练数据合成（5 类，~800 条） — 格式符合 Alpaca/instruction-output，可加载
