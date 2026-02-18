@@ -368,7 +368,7 @@ paper-pilot/
 - [x] F2 Router 节点优先调用本地模型，Fallback Cloud LLM — 集成测试可切换本地/Cloud
   - 产物: `src/agent/nodes/router.py`（更新 fallback 逻辑）
   - 验收: `pytest tests/unit/test_router.py -k fallback` 通过
-- [ ] F3 Critic 本地 DPO 模型加载与 evaluate — 同上，Fallback 逻辑
+- [x] F3 Critic 本地 DPO 模型加载与 evaluate — 同上，Fallback 逻辑
   - 产物: `src/models/inference.py`（更新 critic 推理）
   - 验收: `pytest tests/unit/test_local_model.py -k critic` 通过
 - [ ] F4 Critic 节点优先调用本地模型，Fallback Cloud LLM — 集成测试可切换

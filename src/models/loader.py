@@ -12,7 +12,10 @@ from typing import Any
 
 from src.agent.state import IntentType
 from src.models.inference import (
+    build_critic_evaluation_prompt,
     build_router_classification_prompt,
+    format_contexts_for_local_critic,
+    parse_critic_evaluation,
     parse_router_classification,
 )
 
@@ -53,6 +56,7 @@ class LocalModelManager:
         self.max_new_tokens = max_new_tokens
         self.use_4bit_if_available = use_4bit_if_available
         self._router_pipeline: LoadedGenerationPipeline | None = None
+        self._critic_pipeline: LoadedGenerationPipeline | None = None
 
     def load_router(self, *, force_reload: bool = False) -> LoadedGenerationPipeline:
         """Load Router model pipeline, preferring 4-bit on CUDA.
@@ -98,6 +102,86 @@ class LocalModelManager:
         )
         response_text = self._extract_generated_text(generated)
         return parse_router_classification(response_text)
+
+    def load_critic(self, *, force_reload: bool = False) -> LoadedGenerationPipeline:
+        """Load Critic model pipeline, preferring 4-bit on CUDA.
+
+        Args:
+            force_reload: Recreate pipeline even if cached.
+
+        Returns:
+            A loaded text-generation pipeline wrapper.
+
+        Raises:
+            ValueError: If ``critic_model_path`` is missing.
+            LocalModelUnavailableError: If transformers/torch are unavailable.
+        """
+        if not self.critic_model_path:
+            raise ValueError("critic_model_path is required to load local critic model")
+
+        if self._critic_pipeline is not None and not force_reload:
+            return self._critic_pipeline
+
+        self._critic_pipeline = self._load_text_generation_pipeline(self.critic_model_path)
+        return self._critic_pipeline
+
+    def evaluate_answer(
+        self,
+        *,
+        question: str,
+        draft_answer: str,
+        retrieved_contexts: list[Any] | None = None,
+        strategy: str = "unknown",
+        pass_threshold: float = 7.0,
+    ) -> dict[str, float | bool | str]:
+        """Evaluate answer quality using the local Critic model.
+
+        Args:
+            question: User's original question.
+            draft_answer: Current answer draft to evaluate.
+            retrieved_contexts: Context snippets from retrieval.
+            strategy: Strategy label that produced the answer.
+            pass_threshold: Score threshold for pass/fail.
+
+        Returns:
+            Dict containing ``passed``, ``score``, ``completeness``,
+            ``faithfulness``, and ``feedback``.
+        """
+        if not draft_answer.strip():
+            return {
+                "passed": False,
+                "score": 0.0,
+                "completeness": 0.0,
+                "faithfulness": 0.0,
+                "feedback": (
+                    "Draft answer is empty. The strategy must provide "
+                    "a substantive answer."
+                ),
+            }
+
+        critic = self.load_critic()
+        contexts = format_contexts_for_local_critic(retrieved_contexts or [])
+        prompt = build_critic_evaluation_prompt(
+            question=question,
+            draft_answer=draft_answer,
+            contexts=contexts,
+            strategy=strategy,
+        )
+        generated = critic.pipeline(
+            prompt,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=False,
+            return_full_text=False,
+        )
+        response_text = self._extract_generated_text(generated)
+        score, completeness, faithfulness, feedback = parse_critic_evaluation(response_text)
+        return {
+            "passed": score >= pass_threshold,
+            "score": score,
+            "completeness": completeness,
+            "faithfulness": faithfulness,
+            "feedback": feedback,
+        }
 
     @staticmethod
     def is_cuda_available() -> bool:
@@ -166,8 +250,3 @@ class LocalModelManager:
         if isinstance(generated, str):
             return generated
         return str(generated)
-"""LocalModelManager: 4-bit quantized model loading."""
-
-
-def placeholder() -> None:
-    """Placeholder — implemented in task F1."""

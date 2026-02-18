@@ -1,4 +1,4 @@
-"""Unit tests for local model loading and Router inference (F1)."""
+"""Unit tests for local model loading and Router/Critic inference."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from src.models.inference import parse_router_classification
+from src.models.inference import parse_critic_evaluation, parse_router_classification
 from src.models.loader import (
     LocalModelManager,
 )
@@ -64,11 +64,40 @@ def test_parse_router_classification_fallback_defaults() -> None:
     assert confidence == pytest.approx(0.42, abs=1e-6)
 
 
+def test_parse_critic_evaluation_json_payload() -> None:
+    """Parses JSON output from local critic model response."""
+    score, completeness, faithfulness, feedback = parse_critic_evaluation(
+        '{"score":8.2,"completeness":0.83,"faithfulness":0.91,"feedback":"Good answer."}'
+    )
+    assert score == pytest.approx(8.2, abs=1e-6)
+    assert completeness == pytest.approx(0.83, abs=1e-6)
+    assert faithfulness == pytest.approx(0.91, abs=1e-6)
+    assert feedback == "Good answer."
+
+
+def test_parse_critic_evaluation_loose_text_payload() -> None:
+    """Parses loose key-value text with percent fields for critic output."""
+    score, completeness, faithfulness, feedback = parse_critic_evaluation(
+        "score=7.4 completeness=82% faithfulness=88% feedback=Need one citation."
+    )
+    assert score == pytest.approx(7.4, abs=1e-6)
+    assert completeness == pytest.approx(0.82, abs=1e-6)
+    assert faithfulness == pytest.approx(0.88, abs=1e-6)
+    assert feedback == "Need one citation."
+
+
 def test_load_router_requires_path() -> None:
     """Router loader requires configured model path."""
     manager = LocalModelManager(router_model_path=None)
     with pytest.raises(ValueError, match="router_model_path"):
         manager.load_router()
+
+
+def test_load_critic_requires_path() -> None:
+    """Critic loader requires configured model path."""
+    manager = LocalModelManager(critic_model_path=None)
+    with pytest.raises(ValueError, match="critic_model_path"):
+        manager.load_critic()
 
 
 def test_classify_question_with_mocked_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -102,6 +131,58 @@ def test_classify_question_empty_input_short_circuit() -> None:
     intent_type, confidence = manager.classify_question("")
     assert intent_type == "factual"
     assert confidence == 0.0
+
+
+def test_evaluate_answer_with_mocked_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Evaluates answer with local critic and parses structured output."""
+    manager = LocalModelManager(critic_model_path="local/critic")
+    fake_pipeline = FakePipeline(
+        '{"score":7.9,"completeness":0.8,"faithfulness":0.84,'
+        '"feedback":"Add one concrete citation."}'
+    )
+
+    def _fake_loader(_: str) -> Any:
+        return type(
+            "LoadedPipeline",
+            (),
+            {"pipeline": fake_pipeline, "model_path": "local/critic", "quantized_4bit": True},
+        )()
+
+    monkeypatch.setattr(manager, "_load_text_generation_pipeline", _fake_loader)
+
+    result = manager.evaluate_answer(
+        question="What is LoRA?",
+        draft_answer="LoRA is a low-rank adaptation method for parameter-efficient tuning.",
+        retrieved_contexts=["LoRA reduces trainable parameters by injecting rank-decomposed matrices."],
+        strategy="simple",
+    )
+
+    assert result["passed"] is True
+    assert result["score"] == pytest.approx(7.9, abs=1e-6)
+    assert result["completeness"] == pytest.approx(0.8, abs=1e-6)
+    assert result["faithfulness"] == pytest.approx(0.84, abs=1e-6)
+    assert result["feedback"] == "Add one concrete citation."
+    assert fake_pipeline.calls, "Pipeline should be invoked once"
+
+    call = fake_pipeline.calls[0]
+    assert "What is LoRA?" in call["prompt"]
+    assert "low-rank adaptation method" in call["prompt"]
+    assert call["return_full_text"] is False
+    assert call["do_sample"] is False
+
+
+def test_evaluate_answer_empty_draft_short_circuit() -> None:
+    """Empty draft answer should avoid model invocation and return hard fail."""
+    manager = LocalModelManager(critic_model_path="unused")
+    result = manager.evaluate_answer(
+        question="What is LoRA?",
+        draft_answer="",
+        retrieved_contexts=[],
+    )
+    assert result["passed"] is False
+    assert result["score"] == pytest.approx(0.0, abs=1e-6)
+    assert result["completeness"] == pytest.approx(0.0, abs=1e-6)
+    assert result["faithfulness"] == pytest.approx(0.0, abs=1e-6)
 
 
 @pytest.mark.skipif(
