@@ -8,7 +8,7 @@ error so callers can fall back to Cloud LLM paths.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from src.agent.state import IntentType
 from src.models.inference import (
@@ -79,6 +79,25 @@ class LocalModelManager:
 
         self._router_pipeline = self._load_text_generation_pipeline(self.router_model_path)
         return self._router_pipeline
+
+    def load(
+        self,
+        *,
+        target: Literal["router", "critic"] = "router",
+        force_reload: bool = False,
+    ) -> LoadedGenerationPipeline:
+        """Load local generation pipeline for a target model role.
+
+        Args:
+            target: Which local model to load.
+            force_reload: Recreate pipeline even if cached.
+
+        Returns:
+            A loaded text-generation pipeline wrapper.
+        """
+        if target == "critic":
+            return self.load_critic(force_reload=force_reload)
+        return self.load_router(force_reload=force_reload)
 
     def classify_question(self, question: str) -> tuple[IntentType, float]:
         """Classify question intent using the local Router model.

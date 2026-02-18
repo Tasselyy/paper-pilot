@@ -100,6 +100,44 @@ def test_load_critic_requires_path() -> None:
         manager.load_critic()
 
 
+def test_load_dispatches_to_router_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Generic load() should route to router loader by default."""
+    manager = LocalModelManager(router_model_path="local/router")
+    expected = type(
+        "LoadedPipeline",
+        (),
+        {"pipeline": object(), "model_path": "local/router", "quantized_4bit": False},
+    )()
+
+    def _fake_load_router(*, force_reload: bool = False) -> Any:
+        assert force_reload is True
+        return expected
+
+    monkeypatch.setattr(manager, "load_router", _fake_load_router)
+    loaded = manager.load(force_reload=True)
+    assert loaded is expected
+
+
+def test_load_dispatches_to_critic_when_target_is_critic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Generic load(target='critic') should route to critic loader."""
+    manager = LocalModelManager(critic_model_path="local/critic")
+    expected = type(
+        "LoadedPipeline",
+        (),
+        {"pipeline": object(), "model_path": "local/critic", "quantized_4bit": False},
+    )()
+
+    def _fake_load_critic(*, force_reload: bool = False) -> Any:
+        assert force_reload is True
+        return expected
+
+    monkeypatch.setattr(manager, "load_critic", _fake_load_critic)
+    loaded = manager.load(target="critic", force_reload=True)
+    assert loaded is expected
+
+
 def test_classify_question_with_mocked_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
     """Classifies question from mocked local model pipeline output."""
     manager = LocalModelManager(router_model_path="local/router")

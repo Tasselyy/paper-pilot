@@ -383,7 +383,7 @@ paper-pilot/
 - [x] G3 DPO 偏好对合成与 DPO 训练脚本 — 可跑通 1 epoch，保存模型
   - 产物: `training/data/generate_dpo_pairs.py`, `training/dpo_critic.py`
   - 验收: `python training/dpo_critic.py --max_steps 10` 不报错，输出模型目录
-- [ ] G4 量化导出与 LocalModelManager 集成 — 4-bit 加载，推理延迟与设计文档一致量级
+- [x] G4 量化导出与 LocalModelManager 集成 — 4-bit 加载，推理延迟与设计文档一致量级
   - 产物: `training/export_quantized.py`
   - 验收: 导出的 4-bit 模型可被 `LocalModelManager.load()` 加载
 - [ ] H1 集成测试覆盖：simple / comparative / multi_hop / exploratory 各一条路径 — 全部通过（可 Mock RAG）
