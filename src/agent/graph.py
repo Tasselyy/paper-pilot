@@ -21,7 +21,12 @@ from langgraph.graph import END, START, StateGraph
 from src.agent.edges import critic_gate, route_by_intent
 from src.agent.nodes.critic import create_critic_node, critic_node
 from src.agent.nodes.format_output import format_output_node
-from src.agent.nodes.memory_nodes import load_memory_node, save_memory_node
+from src.agent.nodes.memory_nodes import (
+    create_load_memory_node,
+    create_save_memory_node,
+    load_memory_node,
+    save_memory_node,
+)
 from src.agent.nodes.retry_refine import create_retry_refine_node, retry_refine_node
 from src.agent.nodes.router import create_router_node, router_node
 from src.agent.nodes.slot_filling import create_slot_filling_node, slot_filling_node
@@ -46,6 +51,7 @@ from src.agent.strategies.simple import (
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
+    from src.memory.long_term import LongTermMemory
     from src.tools.tool_wrapper import RAGToolWrapper
 
 
@@ -54,6 +60,8 @@ def build_main_graph(
     rag: RAGToolWrapper | None = None,
     llm: BaseChatModel | None = None,
     rag_default_collection: str | None = None,
+    long_term_memory: LongTermMemory | None = None,
+    memory_llm: BaseChatModel | None = None,
 ) -> StateGraph:
     """Build and return the compiled main agent graph.
 
@@ -72,6 +80,10 @@ def build_main_graph(
         llm: Optional ``BaseChatModel`` instance for answer synthesis.
         rag_default_collection: Optional RAG collection name to restrict
             query_knowledge_hub to; None = do not restrict.
+        long_term_memory: Optional ``LongTermMemory`` instance. When provided,
+            graph memory nodes use real recall/memorize implementations.
+        memory_llm: Optional LLM dedicated to save-memory fact extraction.
+            Defaults to *llm* when omitted.
 
     Returns:
         A compiled LangGraph ``StateGraph`` with ``MemorySaver`` checkpointer.
@@ -109,8 +121,17 @@ def build_main_graph(
         _critic_node = critic_node
         _retry_refine_node = retry_refine_node
 
+    if long_term_memory is not None:
+        _load_memory_node = create_load_memory_node(long_term_memory)
+        _save_memory_node = create_save_memory_node(
+            long_term_memory, llm=memory_llm or llm,
+        )
+    else:
+        _load_memory_node = load_memory_node
+        _save_memory_node = save_memory_node
+
     # ── Node registration ─────────────────────────────
-    graph.add_node("load_memory", load_memory_node)
+    graph.add_node("load_memory", _load_memory_node)
     graph.add_node("route", _router_node)
     graph.add_node("slot_fill", _slot_filling_node)
     graph.add_node("simple", _simple_node)
@@ -119,7 +140,7 @@ def build_main_graph(
     graph.add_node("exploratory", _exploratory_node)
     graph.add_node("critic", _critic_node)
     graph.add_node("retry_refine", _retry_refine_node)
-    graph.add_node("save_memory", save_memory_node)
+    graph.add_node("save_memory", _save_memory_node)
     graph.add_node("format_output", format_output_node)
 
     # ── Edges ─────────────────────────────────────────
