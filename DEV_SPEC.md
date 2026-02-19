@@ -386,7 +386,7 @@ paper-pilot/
 - [x] G4 量化导出与 LocalModelManager 集成 — 4-bit 加载，推理延迟与设计文档一致量级
   - 产物: `training/export_quantized.py`
   - 验收: 导出的 4-bit 模型可被 `LocalModelManager.load()` 加载
-- [ ] H1 集成测试覆盖：simple / comparative / multi_hop / exploratory 各一条路径 — 全部通过（可 Mock RAG）
+- [x] H1 集成测试覆盖：simple / comparative / multi_hop / exploratory 各一条路径 — 全部通过（可 Mock RAG）
   - 产物: `tests/integration/test_all_strategies.py`
   - 验收: `pytest tests/integration/test_all_strategies.py` 4 条路径全部通过
 - [ ] H2 E2E（可选）：真实 RAG Server + 测试集合，2～3 条问答 — 回答与引用合理
