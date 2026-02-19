@@ -392,7 +392,7 @@ paper-pilot/
 - [x] H2 E2E（可选）：真实 RAG Server + 测试集合，2～3 条问答 — 回答与引用合理
   - 产物: `tests/e2e/test_e2e.py`
   - 验收: `pytest tests/e2e/ -m e2e` 通过（需 RAG Server 运行）
-- [ ] H3 README：环境、配置、运行方式、与 RAG 的对接说明 — 新克隆可按文档跑通
+- [x] H3 README：环境、配置、运行方式、与 RAG 的对接说明 — 新克隆可按文档跑通（2026-02-18：已补充完整 Quick Start 与 MCP 对接说明）
   - 产物: `README.md`
   - 验收: 按 README 步骤在干净环境可成功运行 demo
 - [ ] H4 面试 Demo 脚本（3～4 个问题对应 4 种模式） — 文档或脚本内注明每个问题的预期策略与亮点
