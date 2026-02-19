@@ -395,7 +395,7 @@ paper-pilot/
 - [x] H3 README：环境、配置、运行方式、与 RAG 的对接说明 — 新克隆可按文档跑通（2026-02-18：已补充完整 Quick Start 与 MCP 对接说明）
   - 产物: `README.md`
   - 验收: 按 README 步骤在干净环境可成功运行 demo
-- [ ] H4 面试 Demo 脚本（3～4 个问题对应 4 种模式） — 文档或脚本内注明每个问题的预期策略与亮点
+- [x] H4 面试 Demo 脚本（3～4 个问题对应 4 种模式） — 文档或脚本内注明每个问题的预期策略与亮点（2026-02-18：新增 `scripts/demo.py`，覆盖 4 个问题、预期策略与演示亮点）
   - 产物: `scripts/demo.py` 或 `docs/DEMO.md`
   - 验收: 4 个问题各触发对应策略，输出含 strategy 标签
 - [ ] H5 长期记忆集成/端到端 — 主图接入 LongTermMemory + create_load_memory_node/create_save_memory_node，多轮问答断言第二轮 accumulated_facts 或 JSONL 含第一轮写入事实
