@@ -389,7 +389,7 @@ paper-pilot/
 - [x] H1 集成测试覆盖：simple / comparative / multi_hop / exploratory 各一条路径 — 全部通过（可 Mock RAG）
   - 产物: `tests/integration/test_all_strategies.py`
   - 验收: `pytest tests/integration/test_all_strategies.py` 4 条路径全部通过
-- [ ] H2 E2E（可选）：真实 RAG Server + 测试集合，2～3 条问答 — 回答与引用合理
+- [x] H2 E2E（可选）：真实 RAG Server + 测试集合，2～3 条问答 — 回答与引用合理
   - 产物: `tests/e2e/test_e2e.py`
   - 验收: `pytest tests/e2e/ -m e2e` 通过（需 RAG Server 运行）
 - [ ] H3 README：环境、配置、运行方式、与 RAG 的对接说明 — 新克隆可按文档跑通
