@@ -404,7 +404,7 @@ paper-pilot/
 - [x] H6 CLI 冒烟自动化 — 用 pytest 或子进程执行 main.py --question "..." --dry-run（或测试 config），断言 exit 0 且 stdout/返回含 final_answer 与 sources（2026-02-18：新增 `tests/integration/test_cli_smoke.py`，覆盖 subprocess CLI 与 run_agent 返回值冒烟）
   - 产物: `tests/integration/test_cli_smoke.py` 或 `tests/e2e/test_cli_smoke.py`
   - 验收: 无需手动跑 main.py 即可在 CI 中回归 CLI 行为
-- [ ] H7 Trace 集成 — 跑通 simple 路径后读取配置的 trace 文件，断言至少一条 JSONL 记录且含 intent/strategy/critic/final_answer
+- [x] H7 Trace 集成 — 跑通 simple 路径后读取配置的 trace 文件，断言至少一条 JSONL 记录且含 intent/strategy/critic/final_answer（2026-02-18：新增 `tests/integration/test_trace_integration.py`，断言 trace JSONL 至少一条且含 intent/strategy_executed/critic_verdict/final_answer）
   - 产物: `tests/integration/test_trace_integration.py`
   - 验收: pytest 通过；trace 落盘格式与字段符合预期
 - [ ] H8 配置驱动建图集成（可选） — 加载测试用 settings 或 fixture yaml，build_main_graph 后 invoke 一次，断言 state 含 final_answer 或预期键
