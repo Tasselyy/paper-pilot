@@ -401,7 +401,7 @@ paper-pilot/
 - [x] H5 长期记忆集成/端到端 — 主图接入 LongTermMemory + create_load_memory_node/create_save_memory_node，多轮问答断言第二轮 accumulated_facts 或 JSONL 含第一轮写入事实（2026-02-18：新增 memory e2e 集成测试并完成主图接线）
   - 产物: `tests/integration/test_memory_e2e.py`（或扩展现有 integration）
   - 验收: pytest 通过；两轮问答后 recall 能返回首轮 memorize 的事实
-- [ ] H6 CLI 冒烟自动化 — 用 pytest 或子进程执行 main.py --question "..." --dry-run（或测试 config），断言 exit 0 且 stdout/返回含 final_answer 与 sources
+- [x] H6 CLI 冒烟自动化 — 用 pytest 或子进程执行 main.py --question "..." --dry-run（或测试 config），断言 exit 0 且 stdout/返回含 final_answer 与 sources（2026-02-18：新增 `tests/integration/test_cli_smoke.py`，覆盖 subprocess CLI 与 run_agent 返回值冒烟）
   - 产物: `tests/integration/test_cli_smoke.py` 或 `tests/e2e/test_cli_smoke.py`
   - 验收: 无需手动跑 main.py 即可在 CI 中回归 CLI 行为
 - [ ] H7 Trace 集成 — 跑通 simple 路径后读取配置的 trace 文件，断言至少一条 JSONL 记录且含 intent/strategy/critic/final_answer
