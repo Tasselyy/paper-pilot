@@ -43,6 +43,9 @@ coverage.xml
 traces/
 *.jsonl
 
+# Training outputs (adapters, DPO models, fallback metadata)
+training/artifacts/
+
 # Local models (large files)
 models/
 checkpoints/
