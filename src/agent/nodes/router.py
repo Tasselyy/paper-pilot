@@ -18,7 +18,7 @@ import logging
 import time
 from typing import Any, Protocol
 
-from langchain_core.language_models import BaseChatModel
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 

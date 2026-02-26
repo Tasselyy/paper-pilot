@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from langchain_openai import ChatOpenAI
 
 if TYPE_CHECKING:
-    from langchain_core.language_models import BaseChatModel
+    from langchain_core.language_models.chat_models import BaseChatModel
 
     from src.config import LLMConfig
 
