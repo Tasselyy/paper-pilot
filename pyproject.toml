@@ -98,4 +98,4 @@ docstring-code-format = true
 # ── setuptools ──────────────────────────────────────────
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["src*", "training*"]

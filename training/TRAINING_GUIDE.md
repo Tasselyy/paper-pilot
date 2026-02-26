@@ -4,6 +4,8 @@ This guide covers the full pipeline: data generation, Router/Critic SFT, Critic 
 
 **Config file:** Defaults for all training steps live in `training/training_config.yaml`. You can edit that file once; then run the scripts with no (or few) CLI args. Any CLI argument overrides the config file.
 
+**Running scripts:** Always run from the **project root** (where `pyproject.toml` lives). After `pip install -e ".[training]"`, `python training/sft_critic.py` works. If you see `ModuleNotFoundError: No module named 'training'`, either reinstall with `pip install -e ".[training]"` or run as a module: `python -m training.sft_critic` (same for other scripts under `training/`).
+
 ## 0) Environment
 
 ```bash
