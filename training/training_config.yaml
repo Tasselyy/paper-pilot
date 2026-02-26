@@ -19,7 +19,7 @@ router_sft:
   lora_dropout: 0.05
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
   seed: 42
-  report_to: "none"
+  report_to: "wandb"
   wandb_project: "paper-pilot"
   run_name: null
   bf16: true
@@ -43,7 +43,7 @@ critic_sft:
   lora_dropout: 0.05
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
   seed: 42
-  report_to: "none"
+  report_to: "wandb"
   wandb_project: "paper-pilot"
   run_name: null
   bf16: true
@@ -67,7 +67,7 @@ dpo:
   logging_steps: 5
   save_steps: 50
   seed: 42
-  report_to: "none"
+  report_to: "wandb"
   wandb_project: "paper-pilot"
   run_name: null
   bf16: true

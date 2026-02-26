@@ -38,7 +38,7 @@ DEFAULT_LORA_ALPHA = 32
 DEFAULT_LORA_DROPOUT = 0.05
 DEFAULT_SEED = 42
 DEFAULT_TARGET_MODULES = ("q_proj", "k_proj", "v_proj", "o_proj")
-DEFAULT_REPORT_TO = "none"
+DEFAULT_REPORT_TO = "wandb"
 DEFAULT_WANDB_PROJECT = "paper-pilot"
 DEFAULT_TRAINING_CONFIG = Path("training/training_config.yaml")
 
