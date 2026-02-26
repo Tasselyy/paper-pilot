@@ -198,8 +198,19 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
     dataset = Dataset.from_dict({"text": training_texts})
 
     def _tokenize(batch: dict[str, list[str]]) -> dict[str, list[list[int]]]:
-        tokenized = tokenizer(batch["text"], truncation=True, max_length=config.max_seq_length)
-        tokenized["labels"] = [ids.copy() for ids in tokenized["input_ids"]]
+        tokenized = tokenizer(
+            batch["text"],
+            truncation=True,
+            padding="max_length",
+            max_length=config.max_seq_length,
+            return_tensors=None,
+        )
+        # Mask padding in labels so we do not compute loss on pad tokens
+        pad_id = tokenizer.pad_token_id
+        tokenized["labels"] = [
+            [-100 if tid == pad_id else tid for tid in ids]
+            for ids in tokenized["input_ids"]
+        ]
         return tokenized
 
     tokenized_dataset = dataset.map(_tokenize, batched=True, remove_columns=["text"])
