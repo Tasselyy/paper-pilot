@@ -9,9 +9,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+# Ensure project root is on path when run as script (e.g. python training/sft_router.py)
+_root = Path(__file__).resolve().parent.parent
+if _root not in sys.path:
+    sys.path.insert(0, str(_root))
 
 from training.config_loader import load_training_section
 
