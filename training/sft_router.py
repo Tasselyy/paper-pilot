@@ -240,8 +240,17 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
             batch["text"],
             truncation=True,
             max_length=config.max_seq_length,
+            padding="max_length",
+            return_tensors=None,
         )
-        tokenized["labels"] = [ids.copy() for ids in tokenized["input_ids"]]
+        # Causal LM: labels = input_ids with -100 at padding so loss is not computed there
+        input_ids = tokenized["input_ids"]
+        attention_mask = tokenized["attention_mask"]
+        labels = [
+            [tid if m else -100 for tid, m in zip(ids, mask)]
+            for ids, mask in zip(input_ids, attention_mask)
+        ]
+        tokenized["labels"] = labels
         return tokenized
 
     tokenized_dataset = dataset.map(
