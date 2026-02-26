@@ -1,12 +1,8 @@
-"""Generate synthetic DPO preference pairs for Critic model training.
+"""生成 Critic DPO 训练用的偏好对，TRL 标准格式。
 
-Each row is a triple (prompt, chosen, rejected) in TRL DPO format:
-- prompt: instruction + question + draft answer (model input).
-- chosen: preferred verdict JSON (high score).
-- rejected: dispreferred verdict JSON (low score).
-
-Output JSONL can be loaded by ``datasets.load_dataset("json", data_files=...)``
-or by ``training/dpo_critic.py``.
+每行一个三元组：prompt（指令+问题+草稿+上下文+策略，即模型输入）、chosen（偏好评判 JSON，高分）、
+rejected（非偏好评判 JSON，低分）。DPOTrainer 会学习拉大 chosen 与 rejected 的 log 差异。
+输出可由 training/dpo_critic.py 直接加载。
 """
 
 from __future__ import annotations
@@ -22,6 +18,7 @@ from src.models.inference import build_critic_evaluation_prompt
 DEFAULT_PAIRS = 500
 DEFAULT_SEED = 42
 
+# prompt 中会包含的指令头，与 Critic 推理/ SFT 一致
 CRITIC_INSTRUCTION = (
     "Evaluate the answer quality for the given question and retrieved context.\n"
     "Score rubric:\n"
@@ -41,7 +38,7 @@ def _verdict_json(
     faithfulness: float,
     feedback: str,
 ) -> str:
-    """Serialize a critic verdict to a compact JSON string."""
+    """将单条评判序列化为紧凑 JSON 字符串（无空格、ASCII 不转义）。"""
     obj = {
         "score": round(score, 1),
         "completeness": round(completeness, 2),
@@ -56,15 +53,7 @@ def generate_dpo_dataset(
     num_pairs: int = DEFAULT_PAIRS,
     seed: int = DEFAULT_SEED,
 ) -> list[dict[str, Any]]:
-    """Generate a synthetic DPO dataset for Critic (prompt, chosen, rejected).
-
-    Args:
-        num_pairs: Number of preference pairs to generate.
-        seed: Random seed for reproducibility.
-
-    Returns:
-        List of dicts with keys prompt, chosen, rejected.
-    """
+    """生成 num_pairs 条 (prompt, chosen, rejected)；prompt 用合成问题/草稿/上下文/策略拼成，chosen 高分、rejected 低分。"""
     if num_pairs <= 0:
         raise ValueError("num_pairs must be > 0")
 
@@ -95,7 +84,7 @@ def generate_dpo_dataset(
 
 
 def _build_prompt(*, question: str, draft_answer: str, contexts: str, strategy: str) -> str:
-    """Build the Critic input prompt (no verdict)."""
+    """拼出 Critic 的输入 prompt（不含评判结果），与推理接口一致。"""
     return build_critic_evaluation_prompt(
         question=question,
         draft_answer=draft_answer,
@@ -105,7 +94,7 @@ def _build_prompt(*, question: str, draft_answer: str, contexts: str, strategy: 
 
 
 def _build_chosen_verdict(*, rng: random.Random, idx: int) -> str:
-    """Build a preferred verdict (pass, score >= 7)."""
+    """生成「偏好」评判：分数 >= 7，completeness/faithfulness 偏高，正向 feedback。"""
     score = 7.0 + rng.uniform(0.5, 2.9)
     score = min(10.0, round(score, 1))
     completeness = round(0.75 + rng.uniform(0, 0.24), 2)
@@ -128,7 +117,7 @@ def _build_chosen_verdict(*, rng: random.Random, idx: int) -> str:
 
 
 def _build_rejected_verdict(*, rng: random.Random, idx: int) -> str:
-    """Build a dispreferred verdict (fail, score < 7)."""
+    """生成「非偏好」评判：分数 < 7，completeness/faithfulness 偏低，改进向 feedback。"""
     score = 2.0 + rng.uniform(0, 4.5)
     score = min(6.9, round(score, 1))
     completeness = round(rng.uniform(0.2, 0.65), 2)
@@ -152,7 +141,7 @@ def _build_rejected_verdict(*, rng: random.Random, idx: int) -> str:
 
 
 def _sample_questions(rng: random.Random, size: int) -> list[str]:
-    """Sample synthetic questions."""
+    """从固定问题模板中随机抽 size 个问题。"""
     templates = (
         "What is LoRA and when would you use it?",
         "Compare QLoRA and full fine-tuning for memory usage.",
@@ -169,7 +158,7 @@ def _sample_questions(rng: random.Random, size: int) -> list[str]:
 
 
 def _sample_draft_answers(rng: random.Random, size: int) -> list[str]:
-    """Sample short draft answers (good and bad mix)."""
+    """从预定义的短答案池中随机抽 size 个作为草稿回答。"""
     answers = (
         "LoRA is a parameter-efficient method that trains low-rank adapters.",
         "QLoRA uses quantized base models and typically reduces memory vs full fine-tuning.",
@@ -186,7 +175,7 @@ def _sample_draft_answers(rng: random.Random, size: int) -> list[str]:
 
 
 def _sample_context_blocks(rng: random.Random, size: int) -> list[str]:
-    """Sample synthetic context blocks formatted like runtime retrieval text."""
+    """随机抽 size 段「检索上下文」文本，格式与运行时一致。"""
     contexts = (
         "[1] Source: LoRA Paper (2021)\nLoRA injects low-rank adapters into attention layers.\n\n"
         "[2] Source: QLoRA (2023)\nQLoRA combines 4-bit quantization with LoRA fine-tuning.",
@@ -200,18 +189,18 @@ def _sample_context_blocks(rng: random.Random, size: int) -> list[str]:
 
 
 def _sample_strategies(rng: random.Random, size: int) -> list[str]:
-    """Sample agent strategy labels for critic prompts."""
+    """随机抽 size 个策略标签，与 Router 输出一致。"""
     strategies = ("simple", "comparative", "multi_hop", "exploratory")
     return [rng.choice(strategies) for _ in range(size)]
 
 
 def _pick(rng: random.Random, choices: tuple[str, ...], idx: int) -> str:
-    """Deterministic choice for variety."""
+    """按 idx 与随机偏移从 choices 中取一项，兼顾可复现与多样性。"""
     return choices[(idx + rng.randint(0, 10)) % len(choices)]
 
 
 def write_jsonl(rows: list[dict[str, Any]], output_path: Path) -> None:
-    """Write rows as UTF-8 JSONL."""
+    """将行按 UTF-8 写入 JSONL。"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
         for row in rows:
@@ -219,7 +208,7 @@ def write_jsonl(rows: list[dict[str, Any]], output_path: Path) -> None:
 
 
 def _parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
+    """解析命令行：偏好对数量、随机种子、输出 JSONL 路径。"""
     parser = argparse.ArgumentParser(
         description="Generate DPO preference pairs for Critic training."
     )
@@ -240,7 +229,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    """Generate and save DPO training data."""
+    """入口：生成 DPO 偏好对并写入 JSONL，打印条数与路径。"""
     args = _parse_args()
     rows = generate_dpo_dataset(num_pairs=args.num_pairs, seed=args.seed)
     write_jsonl(rows=rows, output_path=args.output)

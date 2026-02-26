@@ -1,4 +1,8 @@
-"""AWQ INT4 quantization script for the base Qwen model."""
+"""基座 Qwen 模型的 AWQ INT4 量化脚本。
+
+使用 AutoAWQ 对 HuggingFace 上的基座模型做 4-bit 量化，校准数据来自本仓库的 Router/Critic 合成数据，
+以保证量化后与下游 Router/Critic 任务分布更接近。输出目录可被 vLLM 等加载；支持 fallback 模式。
+"""
 
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ from training.config_loader import load_training_section
 from training.data.generate_critic_sft_data import generate_critic_sft_dataset
 from training.data.generate_router_data import generate_router_dataset
 
+# ---------- 默认配置 ----------
 DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 DEFAULT_OUTPUT_DIR = Path("training/artifacts/qwen2.5-7b-awq")
 DEFAULT_BITS = 4
@@ -23,7 +28,7 @@ DEFAULT_TRAINING_CONFIG = Path("training/training_config.yaml")
 
 
 def _quantize_defaults_from_section(section: dict[str, Any]) -> dict[str, Any]:
-    """Convert quantize YAML section to argparse defaults."""
+    """将 YAML 中 quantize 节转为 argparse set_defaults 用的字典。"""
     if not section:
         return {}
     return {
@@ -40,7 +45,7 @@ def _quantize_defaults_from_section(section: dict[str, Any]) -> dict[str, Any]:
 
 @dataclass(slots=True)
 class QuantizeConfig:
-    """Quantization settings and output locations."""
+    """量化配置：模型名、输出目录、比特数/分组/零点和校准样本数、随机种子与 fallback 开关。"""
 
     model_name: str
     output_dir: Path
@@ -54,7 +59,7 @@ class QuantizeConfig:
 
 @dataclass(slots=True)
 class QuantizeResult:
-    """Outcome of one quantization run."""
+    """单次量化运行结果：输出目录、是否 fallback、提示信息。"""
 
     output_dir: Path
     used_fallback: bool
@@ -62,7 +67,7 @@ class QuantizeResult:
 
 
 def run_quantization(config: QuantizeConfig) -> QuantizeResult:
-    """Run AWQ quantization or fallback metadata generation."""
+    """执行 AWQ 量化；异常时若开启 fallback_on_error 则写 fallback 元数据并返回，否则抛异常。"""
     try:
         _run_real_quantization(config)
         return QuantizeResult(
@@ -77,6 +82,7 @@ def run_quantization(config: QuantizeConfig) -> QuantizeResult:
 
 
 def _run_real_quantization(config: QuantizeConfig) -> None:
+    """实际执行 AWQ 量化：加载模型与 tokenizer、用合成数据做校准、量化并保存到 output_dir。"""
     try:
         from awq import AutoAWQForCausalLM
         from transformers import AutoTokenizer
@@ -87,6 +93,7 @@ def _run_real_quantization(config: QuantizeConfig) -> None:
     tokenizer = AutoTokenizer.from_pretrained(config.model_name, use_fast=True)
     calibration_texts = _build_calibration_texts(config.calib_samples, seed=config.seed)
     quant_config = {
+        # w_bit: 权重量化比特数；q_group_size: 分组大小；zero_point: 是否使用零点
         "w_bit": int(config.bits),
         "q_group_size": int(config.group_size),
         "zero_point": bool(config.zero_point),
@@ -99,6 +106,7 @@ def _run_real_quantization(config: QuantizeConfig) -> None:
 
 
 def _build_calibration_texts(calib_samples: int, *, seed: int) -> list[str]:
+    """用 Router 与 Critic 的合成数据拼出校准文本列表，供 AWQ 估计激活分布；总条数不超过 calib_samples。"""
     router_rows = generate_router_dataset(samples_per_intent=max(1, calib_samples // 10), seed=seed)
     critic_rows = generate_critic_sft_dataset(num_samples=max(1, calib_samples), seed=seed + 1)
     texts: list[str] = []
@@ -110,6 +118,7 @@ def _build_calibration_texts(calib_samples: int, *, seed: int) -> list[str]:
 
 
 def _write_fallback_artifact(config: QuantizeConfig, reason: str) -> QuantizeResult:
+    """量化失败时在 output_dir 写入 fallback_metadata.json，便于流水线继续。"""
     config.output_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "status": "fallback",
@@ -126,6 +135,7 @@ def _write_fallback_artifact(config: QuantizeConfig, reason: str) -> QuantizeRes
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """构建量化脚本的 CLI 解析器；默认值会与 YAML quantize 节在 parse_config 中合并。"""
     parser = argparse.ArgumentParser(description="Quantize base model with AWQ.")
     parser.add_argument(
         "--config",
@@ -149,6 +159,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def parse_config(argv: list[str] | None = None) -> QuantizeConfig:
+    """从 argv 解析 QuantizeConfig；若存在 training_config.yaml 则用其中 quantize 节覆盖默认值。"""
     argv = argv if argv is not None else []
     parser = build_arg_parser()
     config_path = DEFAULT_TRAINING_CONFIG
@@ -173,6 +184,7 @@ def parse_config(argv: list[str] | None = None) -> QuantizeConfig:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """CLI 入口：解析配置、执行量化并打印结果。"""
     config = parse_config(argv)
     result = run_quantization(config)
     print(result.message)

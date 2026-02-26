@@ -1,7 +1,8 @@
-"""LoRA SFT training script for Router intent classification.
+"""Router 意图分类的 LoRA SFT 训练脚本。
 
-This script trains a causal LM with LoRA adapters on the synthetic Router
-dataset generated in ``training/data/router_train.jsonl``.
+在 Alpaca 格式的 Router 数据上微调因果语言模型（加 LoRA），使模型能根据用户问题输出意图类型
+（factual / comparative / multi_hop / exploratory / follow_up）及置信度。数据通常由
+training/data/generate_router_data.py 生成并写入 router_train.jsonl。支持 fallback 模式。
 """
 
 from __future__ import annotations
@@ -14,13 +15,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-# Ensure project root is on path when run as script (e.g. python training/sft_router.py)
+# 以脚本方式运行时（如 python training/sft_router.py）把项目根加入 path，保证能 import training
 _root = Path(__file__).resolve().parent.parent
 if _root not in sys.path:
     sys.path.insert(0, str(_root))
 
 from training.config_loader import load_training_section
 
+# ---------- 默认超参与路径 ----------
 DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 DEFAULT_DATASET_PATH = Path("training/data/router_train.jsonl")
 DEFAULT_OUTPUT_DIR = Path("training/artifacts/router_lora_adapter")
@@ -44,7 +46,7 @@ DEFAULT_TRAINING_CONFIG = Path("training/training_config.yaml")
 
 
 def _router_defaults_from_section(section: dict[str, Any]) -> dict[str, Any]:
-    """Convert router_sft YAML section to argparse defaults (parser dest names)."""
+    """将 YAML 中 router_sft 节转为 argparse set_defaults 用的字典（key 为 parser 的 dest）。"""
     if not section:
         return {}
     target = section.get("target_modules")
@@ -78,7 +80,7 @@ def _router_defaults_from_section(section: dict[str, Any]) -> dict[str, Any]:
 
 @dataclass(slots=True)
 class SFTConfig:
-    """Hyperparameters and file paths for Router LoRA SFT."""
+    """Router LoRA SFT 的完整配置：模型、数据/输出路径、训练与 LoRA 超参、日志与 fallback。"""
 
     model_name: str
     dataset_path: Path
@@ -106,7 +108,7 @@ class SFTConfig:
 
 @dataclass(slots=True)
 class TrainingResult:
-    """Outcome of one training attempt."""
+    """单次训练结果：适配器目录、是否 fallback、提示信息及可选的失败原因。"""
 
     adapter_dir: Path
     used_fallback: bool
@@ -115,7 +117,7 @@ class TrainingResult:
 
 
 def build_prompt(*, instruction: str, input_text: str, output_text: str) -> str:
-    """Build one instruction-tuning sample in plain text format."""
+    """将一条 Alpaca 样本拼成「Instruction / Input / Response」纯文本，供后续 tokenize。"""
     return (
         "### Instruction:\n"
         f"{instruction.strip()}\n\n"
@@ -127,14 +129,7 @@ def build_prompt(*, instruction: str, input_text: str, output_text: str) -> str:
 
 
 def load_router_rows(dataset_path: Path) -> list[dict[str, Any]]:
-    """Load Router training rows from JSONL.
-
-    Args:
-        dataset_path: JSONL path with Alpaca-style fields.
-
-    Returns:
-        Parsed rows as dictionaries.
-    """
+    """从 JSONL 加载 Router 训练行（Alpaca 风格：instruction / input / output 等）。"""
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
@@ -152,7 +147,7 @@ def load_router_rows(dataset_path: Path) -> list[dict[str, Any]]:
 
 
 def _write_fallback_artifact(config: SFTConfig, reason: str) -> TrainingResult:
-    """Create adapter-like output folder so workflow can proceed in constrained envs."""
+    """在训练失败时创建「类适配器」输出目录并写入元数据，便于流水线在受限环境下继续。"""
     config.output_dir.mkdir(parents=True, exist_ok=True)
     metadata = {
         "status": "fallback",
@@ -181,12 +176,7 @@ def _write_fallback_artifact(config: SFTConfig, reason: str) -> TrainingResult:
 
 
 def run_sft(config: SFTConfig) -> TrainingResult:
-    """Run LoRA SFT training and persist adapter.
-
-    If training dependencies are unavailable (or training fails) and
-    ``fallback_on_error`` is enabled, an adapter artifact directory is still
-    generated with diagnostic metadata.
-    """
+    """执行 Router LoRA SFT：加载数据、拼 prompt、真实训练并保存 adapter。若开启 fallback_on_error 且失败则写 fallback 元数据。"""
     try:
         rows = load_router_rows(config.dataset_path)
         training_texts = [
@@ -212,7 +202,7 @@ def run_sft(config: SFTConfig) -> TrainingResult:
 
 
 def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
-    """Run actual LoRA fine-tuning with transformers + peft + datasets."""
+    """实际执行 LoRA 微调：tokenize（定长 + labels 掩码）、挂 LoRA、Trainer 训练并保存 adapter 与 tokenizer。"""
     try:
         from datasets import Dataset
         from peft import LoraConfig, TaskType, get_peft_model
@@ -243,7 +233,7 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
             padding="max_length",
             return_tensors=None,
         )
-        # Causal LM: labels = input_ids with -100 at padding so loss is not computed there
+        # 因果 LM：labels 与 input_ids 一致，padding 位置填 -100，不参与 loss 计算
         input_ids = tokenized["input_ids"]
         attention_mask = tokenized["attention_mask"]
         labels = [
@@ -301,7 +291,7 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build CLI argument parser."""
+    """构建 Router SFT 的 CLI 解析器；默认值会与 YAML 在 parse_config 中合并。"""
     parser = argparse.ArgumentParser(description="Train Router LoRA adapter with SFT.")
     parser.add_argument(
         "--config",
@@ -384,7 +374,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def parse_config(argv: list[str] | None = None) -> SFTConfig:
-    """Parse CLI args into ``SFTConfig``. Defaults from training_config.yaml if present."""
+    """从 argv 解析 SFTConfig；若存在配置文件则先用 router_sft 节覆盖默认值。"""
     argv = argv if argv is not None else []
     parser = build_arg_parser()
     # Resolve --config path from argv so we can load defaults before full parse
@@ -425,7 +415,7 @@ def parse_config(argv: list[str] | None = None) -> SFTConfig:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """CLI entry point."""
+    """CLI 入口：加载 .env、解析配置、执行 SFT 并打印结果；若 fallback 则打印原因。"""
     try:
         from dotenv import load_dotenv
 

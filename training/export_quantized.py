@@ -1,11 +1,10 @@
-"""Export trained Router/Critic artifacts into a LocalModelManager-loadable package.
+"""将训练好的 Router/Critic 产物导出为 LocalModelManager 可加载的模型包。
 
-This script supports two common cases:
-1. Exporting a full model directory directly.
-2. Merging a LoRA adapter into a base model, then exporting merged weights.
+支持两种用法：
+1. 直接导出：--model-path 指向已合并好的完整模型目录，原样保存到 output-dir。
+2. 先合并再导出：指定 --base-model 与 --model-path（LoRA 适配器目录），脚本会先 merge LoRA 再保存。
 
-The exported directory can be loaded by ``LocalModelManager`` and, on CUDA
-machines, can be consumed with 4-bit loading enabled.
+导出目录可被 src.models.loader.LocalModelManager 加载，在 CUDA 环境下可配合 4-bit 加载。支持 fallback 模式。
 """
 
 from __future__ import annotations
@@ -16,13 +15,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+# ---------- 默认路径 ----------
 DEFAULT_MODEL_PATH = Path("training/artifacts/router_lora_adapter")
 DEFAULT_OUTPUT_DIR = Path("training/artifacts/router_quantized_model")
 
 
 @dataclass(slots=True)
 class ExportConfig:
-    """Configuration for quantized export workflow."""
+    """导出配置：模型/适配器路径、输出目录、可选基座（用于合并 LoRA）、是否校验加载与 fallback。"""
 
     model_path: Path
     output_dir: Path
@@ -34,7 +34,7 @@ class ExportConfig:
 
 @dataclass(slots=True)
 class ExportResult:
-    """Result of one export attempt."""
+    """单次导出结果：模型目录、是否 fallback、提示信息。"""
 
     model_dir: Path
     used_fallback: bool
@@ -42,7 +42,7 @@ class ExportResult:
 
 
 def _write_fallback_artifact(config: ExportConfig, reason: str) -> ExportResult:
-    """Write fallback metadata when export cannot proceed."""
+    """导出无法进行时在 output_dir 写入 fallback 元数据，便于流水线继续。"""
     config.output_dir.mkdir(parents=True, exist_ok=True)
     metadata = {
         "status": "fallback",
@@ -74,7 +74,7 @@ def _write_export_metadata(
     export_config: ExportConfig,
     merged_lora: bool,
 ) -> None:
-    """Persist export metadata for reproducibility."""
+    """在输出目录写入 export_metadata.json，记录路径、是否合并 LoRA 等，便于复现与排查。"""
     metadata_path = output_dir / "export_metadata.json"
     payload = {
         "status": "ok",
@@ -92,7 +92,7 @@ def _write_export_metadata(
 
 
 def _run_real_export(config: ExportConfig) -> None:
-    """Execute model export (and optional LoRA merge) with transformers APIs."""
+    """实际执行导出：若指定了 base_model 则先加载基座、挂载 LoRA 并 merge，再保存；否则直接加载 model_path 并保存。"""
     try:
         from transformers import AutoModelForCausalLM, AutoTokenizer
     except Exception as exc:  # pragma: no cover - depends on optional deps
@@ -104,6 +104,7 @@ def _run_real_export(config: ExportConfig) -> None:
     model_source = str(config.model_path)
     merged_lora = False
 
+    # 若指定了基座，则按「基座 + LoRA 适配器」合并后导出
     if config.base_model_name_or_path:
         try:
             from peft import PeftModel
@@ -119,11 +120,13 @@ def _run_real_export(config: ExportConfig) -> None:
         model = PeftModel.from_pretrained(base_model, model_source)
         model = model.merge_and_unload()
         merged_lora = True
+        # 优先从适配器目录加载 tokenizer，没有则用基座
         tokenizer = _load_tokenizer_with_fallback(
             primary=model_source,
             fallback=config.base_model_name_or_path,
         )
     else:
+        # 直接导出：model_path 即为完整模型目录
         model = AutoModelForCausalLM.from_pretrained(model_source, device_map="auto")
         tokenizer = AutoTokenizer.from_pretrained(model_source, use_fast=True)
 
@@ -147,7 +150,7 @@ def _run_real_export(config: ExportConfig) -> None:
 
 
 def _load_tokenizer_with_fallback(*, primary: str, fallback: str) -> Any:
-    """Load tokenizer from primary path, fallback to base model when missing."""
+    """优先从 primary（如适配器目录）加载 tokenizer，失败则从 fallback（基座）加载。"""
     from transformers import AutoTokenizer
 
     try:
@@ -157,7 +160,7 @@ def _load_tokenizer_with_fallback(*, primary: str, fallback: str) -> Any:
 
 
 def _validate_export_with_local_model_manager(model_dir: Path) -> None:
-    """Validate exported model directory can be loaded by LocalModelManager."""
+    """用 LocalModelManager 加载导出目录，校验是否可被应用侧正常使用。"""
     from src.models.loader import LocalModelManager
 
     manager = LocalModelManager(router_model_path=str(model_dir))
@@ -165,7 +168,7 @@ def _validate_export_with_local_model_manager(model_dir: Path) -> None:
 
 
 def run_export(config: ExportConfig) -> ExportResult:
-    """Run export workflow with fallback mode support."""
+    """执行导出流程；异常时若开启 fallback_on_error 则写 fallback 元数据并返回，否则抛异常。"""
     try:
         _run_real_export(config)
         return ExportResult(
@@ -183,7 +186,7 @@ def run_export(config: ExportConfig) -> ExportResult:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build CLI argument parser."""
+    """构建导出脚本的 CLI 解析器。"""
     parser = argparse.ArgumentParser(
         description="Export model artifacts for LocalModelManager 4-bit loading."
     )
@@ -223,7 +226,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def parse_config(argv: list[str] | None = None) -> ExportConfig:
-    """Parse CLI args into ``ExportConfig``."""
+    """从 argv 解析 ExportConfig（本脚本不读 YAML，仅用 CLI 与默认值）。"""
     args = build_arg_parser().parse_args(argv)
     return ExportConfig(
         model_path=Path(args.model_path),
@@ -238,7 +241,7 @@ def parse_config(argv: list[str] | None = None) -> ExportConfig:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """CLI entry point."""
+    """CLI 入口：解析配置、执行导出并打印结果。"""
     config = parse_config(argv)
     result = run_export(config)
     print(result.message)

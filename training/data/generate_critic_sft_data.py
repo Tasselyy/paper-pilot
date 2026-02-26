@@ -1,4 +1,9 @@
-"""Generate synthetic Critic SFT training data in Alpaca JSONL format."""
+"""生成 Critic SFT 用的合成数据，Alpaca JSONL 格式。
+
+每条样本包含：instruction（评判说明）、input（由 build_critic_evaluation_prompt 拼出的问题+草稿+上下文+策略）、
+output（JSON：score/completeness/faithfulness/feedback）。质量分 0–4 档，用于训练 Critic 打分的多样性。
+输出可供 training/sft_critic.py 使用。
+"""
 
 from __future__ import annotations
 
@@ -13,6 +18,7 @@ from src.models.inference import build_critic_evaluation_prompt
 DEFAULT_NUM_SAMPLES = 800
 DEFAULT_SEED = 42
 
+# 与推理时一致：要求模型只输出指定 key 的 JSON
 CRITIC_INSTRUCTION = (
     "Evaluate the answer quality for the given question and retrieved context.\n"
     "Score rubric:\n"
@@ -28,14 +34,14 @@ def generate_critic_sft_dataset(
     num_samples: int = DEFAULT_NUM_SAMPLES,
     seed: int = DEFAULT_SEED,
 ) -> list[dict[str, Any]]:
-    """Generate synthetic Critic SFT rows in Alpaca format."""
+    """生成 num_samples 条 Critic SFT 样本：问题/草稿/上下文/策略随机组合，output 按 quality_band 生成对应分数与评语；最后打乱。"""
     if num_samples <= 0:
         raise ValueError("num_samples must be > 0")
 
     rng = random.Random(seed)
     rows: list[dict[str, Any]] = []
     for idx in range(num_samples):
-        quality_band = idx % 4
+        quality_band = idx % 4  # 0=差 1=中 2=良 3=优，循环以覆盖各档
         question = _sample_question(rng)
         draft_answer = _sample_answer(rng, quality_band=quality_band)
         contexts = _sample_context_block(rng)
@@ -61,7 +67,7 @@ def generate_critic_sft_dataset(
 
 
 def write_jsonl(rows: list[dict[str, Any]], output_path: Path) -> None:
-    """Write rows as UTF-8 JSONL."""
+    """将行按 UTF-8 写入 JSONL，每行一个 JSON。"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
         for row in rows:
@@ -69,6 +75,7 @@ def write_jsonl(rows: list[dict[str, Any]], output_path: Path) -> None:
 
 
 def _build_verdict_json(rng: random.Random, *, quality_band: int) -> str:
+    """按 quality_band（0~3）生成对应分数区间的评判 JSON 字符串。"""
     if quality_band == 0:
         score = rng.uniform(1.5, 4.2)
         completeness = rng.uniform(0.2, 0.5)
@@ -120,6 +127,7 @@ def _build_verdict_json(rng: random.Random, *, quality_band: int) -> str:
 
 
 def _sample_question(rng: random.Random) -> str:
+    """从固定问题池中随机抽一题。"""
     pool = (
         "What is LoRA and when is it preferable to full fine-tuning?",
         "Compare LoRA and QLoRA in terms of memory usage and quality.",
@@ -132,6 +140,7 @@ def _sample_question(rng: random.Random) -> str:
 
 
 def _sample_answer(rng: random.Random, *, quality_band: int) -> str:
+    """按 quality_band 从差/中/好答案池中抽样，用于构造 input 中的 draft_answer。"""
     bad = (
         "LoRA is just a dataset and usually slower than all methods.",
         "RAG mainly increases hallucinations because of extra context.",
@@ -157,6 +166,7 @@ def _sample_answer(rng: random.Random, *, quality_band: int) -> str:
 
 
 def _sample_context_block(rng: random.Random) -> str:
+    """随机选一段「检索到的上下文」文本，格式与推理时一致。"""
     pool = (
         "[1] Source: LoRA Paper\nLoRA reduces trainable parameters via low-rank updates.\n\n"
         "[2] Source: QLoRA\nQLoRA uses quantized base weights with LoRA adapters.",
@@ -170,10 +180,12 @@ def _sample_context_block(rng: random.Random) -> str:
 
 
 def _sample_strategy(rng: random.Random) -> str:
+    """随机选一个策略标签，与 Router 输出一致。"""
     return rng.choice(("simple", "comparative", "multi_hop", "exploratory"))
 
 
 def _parse_args() -> argparse.Namespace:
+    """解析命令行：样本数、随机种子、输出 JSONL 路径。"""
     parser = argparse.ArgumentParser(description="Generate Critic SFT Alpaca JSONL dataset.")
     parser.add_argument("--num-samples", type=int, default=DEFAULT_NUM_SAMPLES)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
@@ -186,6 +198,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """入口：生成 Critic SFT 数据并写入 JSONL，打印样本数与路径。"""
     args = _parse_args()
     rows = generate_critic_sft_dataset(num_samples=args.num_samples, seed=args.seed)
     write_jsonl(rows=rows, output_path=args.output)

@@ -1,10 +1,8 @@
-"""DPO training script for Critic preference learning.
+"""Critic 偏好学习的 DPO 训练脚本。
 
-Trains a causal LM (optionally with LoRA) on preference pairs
-(prompt, chosen, rejected) produced by ``training/data/generate_dpo_pairs.py``.
-Saves the trained model or adapter to an output directory.
-
-Design reference: DEV_SPEC G3.
+在 (prompt, chosen, rejected) 偏好对上用 TRL 的 DPOTrainer 训练因果语言模型（可加 LoRA），
+使 Critic 更倾向输出高质量评判（chosen）而非低质量评判（rejected）。数据由
+training/data/generate_dpo_pairs.py 生成。训练结果保存到指定输出目录；支持 fallback 模式。
 """
 
 from __future__ import annotations
@@ -18,6 +16,7 @@ from typing import Any
 
 from training.config_loader import load_training_section
 
+# ---------- 默认超参与路径 ----------
 DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 DEFAULT_DATASET_PATH = Path("training/data/dpo_train.jsonl")
 DEFAULT_OUTPUT_DIR = Path("training/artifacts/critic_dpo_model")
@@ -41,7 +40,7 @@ DEFAULT_TRAINING_CONFIG = Path("training/training_config.yaml")
 
 
 def _dpo_defaults_from_section(section: dict[str, Any]) -> dict[str, Any]:
-    """Convert dpo YAML section to argparse defaults."""
+    """将 YAML 中 dpo 节转为 argparse set_defaults 用的字典。"""
     if not section:
         return {}
     target = section.get("target_modules")
@@ -75,7 +74,7 @@ def _dpo_defaults_from_section(section: dict[str, Any]) -> dict[str, Any]:
 
 @dataclass(slots=True)
 class DPOConfig:
-    """Hyperparameters and paths for Critic DPO training."""
+    """DPO 训练配置：模型、数据/输出路径、步数/学习率/beta、LoRA 与日志、fallback 开关。"""
 
     model_name: str
     dataset_path: Path
@@ -103,7 +102,7 @@ class DPOConfig:
 
 @dataclass(slots=True)
 class DPOResult:
-    """Outcome of one DPO training run."""
+    """单次 DPO 运行结果：模型目录、是否 fallback、提示信息。"""
 
     model_dir: Path
     used_fallback: bool
@@ -111,14 +110,7 @@ class DPOResult:
 
 
 def load_dpo_rows(dataset_path: Path) -> list[dict[str, Any]]:
-    """Load DPO preference rows from JSONL (prompt, chosen, rejected).
-
-    Args:
-        dataset_path: Path to JSONL file.
-
-    Returns:
-        List of dicts with keys prompt, chosen, rejected.
-    """
+    """从 JSONL 加载 DPO 偏好数据，每行必须包含 prompt、chosen、rejected 三个键。"""
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
@@ -141,7 +133,7 @@ def load_dpo_rows(dataset_path: Path) -> list[dict[str, Any]]:
 
 
 def _write_fallback_artifact(config: DPOConfig, reason: str) -> DPOResult:
-    """Write fallback metadata so workflow can proceed when training fails."""
+    """训练失败时写入 fallback 元数据目录，便于流水线继续。"""
     config.output_dir.mkdir(parents=True, exist_ok=True)
     metadata = {
         "status": "fallback",
@@ -168,11 +160,7 @@ def _write_fallback_artifact(config: DPOConfig, reason: str) -> DPOResult:
 
 
 def run_dpo(config: DPOConfig) -> DPOResult:
-    """Run DPO training and save model.
-
-    If dependencies are missing or training fails and ``fallback_on_error``
-    is True, writes fallback metadata to ``output_dir`` instead of raising.
-    """
+    """执行 DPO 训练并保存模型/适配器。若 fallback_on_error 为 True 且出错，则写 fallback 元数据而不抛异常。"""
     try:
         rows = load_dpo_rows(config.dataset_path)
         _run_real_dpo(config=config, rows=rows)
@@ -188,7 +176,7 @@ def run_dpo(config: DPOConfig) -> DPOResult:
 
 
 def _run_real_dpo(*, config: DPOConfig, rows: list[dict[str, Any]]) -> None:
-    """Run actual DPO training with TRL DPOTrainer."""
+    """使用 TRL DPOTrainer 执行 DPO：数据为原始行（含 prompt/chosen/rejected），tokenization 由 Trainer 内部完成。"""
     try:
         from datasets import Dataset
         from peft import LoraConfig, TaskType, get_peft_model
@@ -208,6 +196,7 @@ def _run_real_dpo(*, config: DPOConfig, rows: list[dict[str, Any]]) -> None:
     dataset = Dataset.from_list(rows)
 
     base_model = AutoModelForCausalLM.from_pretrained(config.model_name)
+    # LoRA 只训练注意力 q/k/v/o，与 SFT 脚本一致
     lora_config = LoraConfig(
         r=config.lora_r,
         lora_alpha=config.lora_alpha,
@@ -250,7 +239,7 @@ def _run_real_dpo(*, config: DPOConfig, rows: list[dict[str, Any]]) -> None:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build CLI argument parser."""
+    """构建 DPO 的 CLI 解析器；默认值在 parse_config 中会与 YAML 的 dpo 节合并。"""
     parser = argparse.ArgumentParser(
         description="Train Critic with DPO on preference pairs."
     )
@@ -379,7 +368,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def parse_config(argv: list[str] | None = None) -> DPOConfig:
-    """Parse CLI args into DPOConfig. Defaults from training_config.yaml if present."""
+    """从 argv 解析 DPOConfig；若存在 training_config.yaml 则用其中 dpo 节覆盖默认值。"""
     argv = argv if argv is not None else []
     parser = build_arg_parser()
     config_path = DEFAULT_TRAINING_CONFIG
@@ -419,7 +408,7 @@ def parse_config(argv: list[str] | None = None) -> DPOConfig:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """CLI entry point."""
+    """CLI 入口：加载 .env、解析配置、执行 DPO 并打印结果。"""
     try:
         from dotenv import load_dotenv
 

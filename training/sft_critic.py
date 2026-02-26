@@ -1,4 +1,9 @@
-"""LoRA SFT training script for Critic answer quality evaluation."""
+"""Critic 答案质量评估模型的 LoRA SFT 训练脚本。
+
+在 instruction/input/output 格式的 Critic SFT 数据上微调因果语言模型（加 LoRA），
+得到可用于评估回答质量的 Critic 适配器。数据通常由 training/data/generate_critic_sft_data.py 生成。
+支持训练失败时写入 fallback 元数据目录，便于流水线在无 GPU 等环境下继续跑通。
+"""
 
 from __future__ import annotations
 
@@ -11,6 +16,7 @@ from typing import Any
 
 from training.config_loader import load_training_section
 
+# ---------- 默认超参与路径（可被 training_config.yaml 与 CLI 覆盖） ----------
 DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 DEFAULT_DATASET_PATH = Path("training/data/critic_sft_train.jsonl")
 DEFAULT_OUTPUT_DIR = Path("training/artifacts/critic_sft_adapter")
@@ -34,7 +40,7 @@ DEFAULT_TRAINING_CONFIG = Path("training/training_config.yaml")
 
 
 def _critic_sft_defaults_from_section(section: dict[str, Any]) -> dict[str, Any]:
-    """Convert critic_sft YAML section to argparse defaults."""
+    """把 YAML 中 critic_sft 节的键值转成 argparse 的 set_defaults 参数字典（key 为 dest 名）。"""
     if not section:
         return {}
     target = section.get("target_modules")
@@ -68,7 +74,7 @@ def _critic_sft_defaults_from_section(section: dict[str, Any]) -> dict[str, Any]
 
 @dataclass(slots=True)
 class SFTConfig:
-    """Hyperparameters and file paths for Critic LoRA SFT."""
+    """Critic LoRA SFT 的完整配置：模型名、数据/输出路径、训练与 LoRA 超参、日志与 fallback 开关。"""
 
     model_name: str
     dataset_path: Path
@@ -96,7 +102,7 @@ class SFTConfig:
 
 @dataclass(slots=True)
 class TrainingResult:
-    """Outcome of one training attempt."""
+    """单次训练尝试的结果：适配器目录、是否走了 fallback、以及给用户看的提示信息。"""
 
     adapter_dir: Path
     used_fallback: bool
@@ -104,7 +110,7 @@ class TrainingResult:
 
 
 def build_prompt(*, instruction: str, input_text: str, output_text: str) -> str:
-    """Build one instruction-tuning sample in plain text format."""
+    """将一条 Alpaca 格式样本拼成「Instruction / Input / Response」的纯文本，供 tokenizer 与 Trainer 使用。"""
     return (
         "### Instruction:\n"
         f"{instruction.strip()}\n\n"
@@ -116,7 +122,7 @@ def build_prompt(*, instruction: str, input_text: str, output_text: str) -> str:
 
 
 def load_rows(dataset_path: Path) -> list[dict[str, Any]]:
-    """Load Critic SFT rows from JSONL."""
+    """从 JSONL 按行加载 Critic SFT 数据，每行需包含 instruction / input / output 等字段。"""
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
@@ -134,6 +140,7 @@ def load_rows(dataset_path: Path) -> list[dict[str, Any]]:
 
 
 def _write_fallback_artifact(config: SFTConfig, reason: str) -> TrainingResult:
+    """训练失败时写入 fallback 目录与元数据，便于流水线继续；返回 used_fallback=True 的 TrainingResult。"""
     config.output_dir.mkdir(parents=True, exist_ok=True)
     metadata = {
         "status": "fallback",
@@ -154,7 +161,7 @@ def _write_fallback_artifact(config: SFTConfig, reason: str) -> TrainingResult:
 
 
 def run_sft(config: SFTConfig) -> TrainingResult:
-    """Run LoRA SFT training and persist adapter."""
+    """执行 Critic LoRA SFT：加载数据、拼 prompt、调用真实训练并保存适配器；异常时按 config 决定是否 fallback。"""
     try:
         rows = load_rows(config.dataset_path)
         training_texts = [
@@ -178,6 +185,7 @@ def run_sft(config: SFTConfig) -> TrainingResult:
 
 
 def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
+    """实际执行 LoRA 微调：tokenize、组 Dataset、挂 LoRA、Trainer 训练并保存 adapter + tokenizer。"""
     try:
         from datasets import Dataset
         from peft import LoraConfig, TaskType, get_peft_model
@@ -198,6 +206,7 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
     dataset = Dataset.from_dict({"text": training_texts})
 
     def _tokenize(batch: dict[str, list[str]]) -> dict[str, list[list[int]]]:
+        # 定长 padding 保证 batch 内序列长度一致，避免 "Unable to create tensor" 等错误
         tokenized = tokenizer(
             batch["text"],
             truncation=True,
@@ -205,7 +214,7 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
             max_length=config.max_seq_length,
             return_tensors=None,
         )
-        # Mask padding in labels so we do not compute loss on pad tokens
+        # 因果 LM：labels 与 input_ids 一致，但 padding 位置填 -100，Trainer 会忽略这些位置不计算 loss
         pad_id = tokenizer.pad_token_id
         tokenized["labels"] = [
             [-100 if tid == pad_id else tid for tid in ids]
@@ -216,6 +225,7 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
     tokenized_dataset = dataset.map(_tokenize, batched=True, remove_columns=["text"])
     base_model = AutoModelForCausalLM.from_pretrained(config.model_name)
     lora_config = LoraConfig(
+        # 只训练注意力中的 q/k/v/o 投影，参数量小、显存友好
         r=config.lora_r,
         lora_alpha=config.lora_alpha,
         lora_dropout=config.lora_dropout,
@@ -255,6 +265,7 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """构建 CLI 解析器，所有参数均有默认值；实际默认值会由 parse_config 用 YAML + 此处默认合并得到。"""
     parser = argparse.ArgumentParser(description="Train Critic LoRA adapter with SFT.")
     parser.add_argument(
         "--config",
@@ -288,6 +299,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def parse_config(argv: list[str] | None = None) -> SFTConfig:
+    """从 argv 解析出 SFTConfig。若存在 training_config.yaml，先用其中 critic_sft 节覆盖 parser 默认值，再解析命令行。"""
     argv = argv if argv is not None else []
     parser = build_arg_parser()
     config_path = DEFAULT_TRAINING_CONFIG
@@ -327,6 +339,7 @@ def parse_config(argv: list[str] | None = None) -> SFTConfig:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """CLI 入口：加载 .env、解析配置、执行 SFT 并打印结果与 fallback 提示。"""
     try:
         from dotenv import load_dotenv
 
