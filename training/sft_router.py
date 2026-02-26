@@ -266,7 +266,6 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
 
     training_args = TrainingArguments(
         output_dir=str(config.output_dir),
-        overwrite_output_dir=True,
         per_device_train_batch_size=config.per_device_train_batch_size,
         gradient_accumulation_steps=config.gradient_accumulation_steps,
         learning_rate=config.learning_rate,
