@@ -149,7 +149,7 @@ def _write_fallback_artifact(config: SFTConfig, reason: str) -> TrainingResult:
     return TrainingResult(
         adapter_dir=config.output_dir,
         used_fallback=True,
-        message=f"Training fallback completed. Adapter artifact ready at: {config.output_dir}",
+        message=f"Training fallback (error: {reason}). Artifact dir: {config.output_dir}. Details: {metadata_path}",
     )
 
 
@@ -327,6 +327,8 @@ def main(argv: list[str] | None = None) -> None:
     print(result.message)
     print(f"adapter_dir={result.adapter_dir}")
     print(f"used_fallback={result.used_fallback}")
+    if result.used_fallback:
+        print("Tip: run with --no-fallback to see the full traceback instead of writing a fallback artifact.")
 
 
 if __name__ == "__main__":
