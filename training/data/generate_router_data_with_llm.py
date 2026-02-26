@@ -75,7 +75,8 @@ def generate_router_dataset_with_llm(
         client = get_client()
     rng = random.Random(seed)
     rows: list[dict[str, Any]] = []
-    for intent in INTENT_TYPES:
+    for i, intent in enumerate(INTENT_TYPES):
+        print(f"  Router: intent {intent} ({i + 1}/{len(INTENT_TYPES)}) ...", flush=True)
         questions = _generate_questions_for_intent(
             intent=intent,
             count=samples_per_intent,

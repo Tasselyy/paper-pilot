@@ -43,6 +43,10 @@ coverage.xml
 # Traces & logs
 traces/
 *.jsonl
+# Training data (LLM-generated): allow Git to track
+!training/data/router_train.jsonl
+!training/data/critic_sft_train.jsonl
+!training/data/dpo_train.jsonl
 
 # Training outputs (adapters, DPO models, fallback metadata)
 training/artifacts/

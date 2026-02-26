@@ -113,7 +113,10 @@ def _run_full_scenario_mode(
     rng = random.Random(seed)
     sft_rows: list[dict[str, Any]] = []
     dpo_rows: list[dict[str, Any]] = []
+    print("Critic/DPO: full-scenario mode (%s scenarios) ..." % num_scenarios, flush=True)
     for i in range(num_scenarios):
+        if (i + 1) % 10 == 0 or i == 0:
+            print("  scenario %s/%s ..." % (i + 1, num_scenarios), flush=True)
         scenario = _generate_one_scenario(client, model)
         if not scenario:
             continue
@@ -156,11 +159,16 @@ def _run_full_scenario_mode(
     with dpo_path.open("w", encoding="utf-8") as f:
         for row in dpo_rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    print(f"Full-scenario: {len(sft_rows)} Critic SFT -> {critic_path}")
-    print(f"Full-scenario: {len(dpo_rows)} DPO pairs -> {dpo_path}")
+    print("Full-scenario: done. %s SFT -> %s, %s DPO -> %s" % (len(sft_rows), critic_path, len(dpo_rows), dpo_path), flush=True)
 
 
 def main() -> None:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+    print("Data generation (all LLM): loading config and connecting ...", flush=True)
     parser = argparse.ArgumentParser(
         description="Generate all training data (Router, Critic SFT, DPO) from LLM."
     )
@@ -199,12 +207,14 @@ def main() -> None:
     if args.api_base:
         os.environ["OPENAI_BASE_URL"] = args.api_base
     client = get_client()
+    print("Connected. Starting Router (first step may take 1–2 min per intent) ...", flush=True)
     output_dir = args.output_dir.resolve()
     if not output_dir.is_absolute() and _root:
         output_dir = (_root / output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1) Router: LLM questions per intent
+    print("Router: generating questions (5 intents × %s each) ..." % args.router_per_intent, flush=True)
     router_path = output_dir / ROUTER_FILENAME
     router_rows = generate_router_dataset_with_llm(
         samples_per_intent=args.router_per_intent,
@@ -213,7 +223,7 @@ def main() -> None:
         client=client,
     )
     write_router_jsonl(router_rows, router_path)
-    print(f"Router: {len(router_rows)} rows -> {router_path}")
+    print(f"Router: done. {len(router_rows)} rows -> {router_path}", flush=True)
 
     # 2) Critic SFT + 3) DPO: either pool+LLM verdicts or full-scenario
     if args.full_scenario:
@@ -225,6 +235,7 @@ def main() -> None:
             client=client,
         )
     else:
+        print("Critic SFT: generating %s samples ..." % args.critic_samples, flush=True)
         critic_path = output_dir / CRITIC_FILENAME
         critic_rows = generate_critic_sft_with_llm(
             num_samples=args.critic_samples,
@@ -235,8 +246,9 @@ def main() -> None:
         with critic_path.open("w", encoding="utf-8") as f:
             for row in critic_rows:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        print(f"Critic SFT: {len(critic_rows)} rows -> {critic_path}")
+        print("Critic SFT: done. %s rows -> %s" % (len(critic_rows), critic_path), flush=True)
 
+        print("DPO: generating %s pairs ..." % args.dpo_pairs, flush=True)
         dpo_path = output_dir / DPO_FILENAME
         dpo_rows = generate_dpo_with_llm(
             num_pairs=args.dpo_pairs,
@@ -247,9 +259,9 @@ def main() -> None:
         with dpo_path.open("w", encoding="utf-8") as f:
             for row in dpo_rows:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        print(f"DPO: {len(dpo_rows)} pairs -> {dpo_path}")
+        print("DPO: done. %s pairs -> %s" % (len(dpo_rows), dpo_path), flush=True)
 
-    print("Done. Use these files with sft_router.py, sft_critic.py, dpo_critic.py (default dataset paths).")
+    print("Done. Use these files with sft_router.py, sft_critic.py, dpo_critic.py (default dataset paths).", flush=True)
 
 
 if __name__ == "__main__":

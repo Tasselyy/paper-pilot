@@ -12,6 +12,15 @@ import re
 from typing import Any
 
 DEFAULT_MODEL = "gpt-4o-mini"
+# 单次请求超时（秒），避免卡死；可通过环境变量 OPENAI_TIMEOUT 覆盖
+DEFAULT_TIMEOUT = 120.0
+
+
+def _get_timeout() -> float:
+    try:
+        return float(os.environ.get("OPENAI_TIMEOUT", DEFAULT_TIMEOUT))
+    except (TypeError, ValueError):
+        return DEFAULT_TIMEOUT
 
 
 def get_client() -> Any:
@@ -32,7 +41,11 @@ def get_client() -> Any:
             "Set OPENAI_API_KEY in the environment for LLM-based data generation. "
             "For vLLM, set OPENAI_BASE_URL and use a dummy OPENAI_API_KEY if needed."
         )
-    return OpenAI(api_key=api_key, base_url=base_url)
+    timeout = _get_timeout()
+    try:
+        return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+    except TypeError:
+        return OpenAI(api_key=api_key, base_url=base_url)
 
 
 def chat_text(
