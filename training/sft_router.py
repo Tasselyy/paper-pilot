@@ -111,6 +111,7 @@ class TrainingResult:
     adapter_dir: Path
     used_fallback: bool
     message: str
+    fallback_reason: str | None = None
 
 
 def build_prompt(*, instruction: str, input_text: str, output_text: str) -> str:
@@ -175,6 +176,7 @@ def _write_fallback_artifact(config: SFTConfig, reason: str) -> TrainingResult:
         adapter_dir=config.output_dir,
         used_fallback=True,
         message=message,
+        fallback_reason=reason,
     )
 
 
@@ -201,6 +203,7 @@ def run_sft(config: SFTConfig) -> TrainingResult:
             adapter_dir=config.output_dir,
             used_fallback=False,
             message=message,
+            fallback_reason=None,
         )
     except Exception as exc:
         if not config.fallback_on_error:
@@ -426,6 +429,8 @@ def main(argv: list[str] | None = None) -> None:
     print(result.message)
     print(f"adapter_dir={result.adapter_dir}")
     print(f"used_fallback={result.used_fallback}")
+    if result.used_fallback and result.fallback_reason:
+        print(f"reason={result.fallback_reason}")
 
 
 if __name__ == "__main__":
