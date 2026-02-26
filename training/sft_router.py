@@ -13,6 +13,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from training.config_loader import load_training_section
+
 DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 DEFAULT_DATASET_PATH = Path("training/data/router_train.jsonl")
 DEFAULT_OUTPUT_DIR = Path("training/artifacts/router_lora_adapter")
@@ -32,6 +34,40 @@ DEFAULT_SEED = 42
 DEFAULT_TARGET_MODULES = ("q_proj", "k_proj", "v_proj", "o_proj")
 DEFAULT_REPORT_TO = "none"
 DEFAULT_WANDB_PROJECT = "paper-pilot"
+DEFAULT_TRAINING_CONFIG = Path("training/training_config.yaml")
+
+
+def _router_defaults_from_section(section: dict[str, Any]) -> dict[str, Any]:
+    """Convert router_sft YAML section to argparse defaults (parser dest names)."""
+    if not section:
+        return {}
+    target = section.get("target_modules")
+    if isinstance(target, list):
+        target = ",".join(str(x) for x in target)
+    return {
+        "model_name": section.get("model_name"),
+        "dataset": Path(section["dataset_path"]) if section.get("dataset_path") else None,
+        "output_dir": Path(section["output_dir"]) if section.get("output_dir") else None,
+        "max_steps": section.get("max_steps"),
+        "epochs": section.get("num_train_epochs"),
+        "batch_size": section.get("per_device_train_batch_size"),
+        "grad_accum_steps": section.get("gradient_accumulation_steps"),
+        "learning_rate": section.get("learning_rate"),
+        "warmup_ratio": section.get("warmup_ratio"),
+        "logging_steps": section.get("logging_steps"),
+        "save_steps": section.get("save_steps"),
+        "max_seq_len": section.get("max_seq_length"),
+        "lora_r": section.get("lora_r"),
+        "lora_alpha": section.get("lora_alpha"),
+        "lora_dropout": section.get("lora_dropout"),
+        "target_modules": target,
+        "seed": section.get("seed"),
+        "report_to": section.get("report_to"),
+        "wandb_project": section.get("wandb_project"),
+        "run_name": section.get("run_name"),
+        "bf16": section.get("bf16"),
+        "no_fallback": not section.get("fallback_on_error", True),
+    }
 
 
 @dataclass(slots=True)
@@ -250,6 +286,12 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build CLI argument parser."""
     parser = argparse.ArgumentParser(description="Train Router LoRA adapter with SFT.")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_TRAINING_CONFIG,
+        help="Path to training_config.yaml (defaults used if file exists).",
+    )
     parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME, help="Base model for LoRA SFT.")
     parser.add_argument(
         "--dataset",
@@ -325,8 +367,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def parse_config(argv: list[str] | None = None) -> SFTConfig:
-    """Parse CLI args into ``SFTConfig``."""
-    args = build_arg_parser().parse_args(argv)
+    """Parse CLI args into ``SFTConfig``. Defaults from training_config.yaml if present."""
+    argv = argv if argv is not None else []
+    parser = build_arg_parser()
+    # Resolve --config path from argv so we can load defaults before full parse
+    config_path = DEFAULT_TRAINING_CONFIG
+    if "--config" in argv:
+        i = argv.index("--config")
+        if i + 1 < len(argv):
+            config_path = Path(argv[i + 1])
+    section = load_training_section(config_path, "router_sft")
+    defaults = {k: v for k, v in _router_defaults_from_section(section).items() if v is not None}
+    parser.set_defaults(**defaults)
+    args = parser.parse_args(argv)
     target_modules = [part.strip() for part in str(args.target_modules).split(",") if part.strip()]
     return SFTConfig(
         model_name=str(args.model_name),

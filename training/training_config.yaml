@@ -1,0 +1,84 @@
+# Training defaults — use as-is or override via CLI (e.g. --model-name, --max_steps).
+# Paths are relative to repo root. CLI args override these values.
+
+router_sft:
+  model_name: "Qwen/Qwen2.5-7B-Instruct"
+  dataset_path: "training/data/router_train.jsonl"
+  output_dir: "training/artifacts/router_lora_adapter"
+  max_steps: 200
+  num_train_epochs: 3.0
+  per_device_train_batch_size: 16
+  gradient_accumulation_steps: 1
+  learning_rate: 2.0e-4
+  warmup_ratio: 0.05
+  logging_steps: 5
+  save_steps: 50
+  max_seq_length: 256
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  seed: 42
+  report_to: "none"
+  wandb_project: "paper-pilot"
+  run_name: null
+  bf16: true
+  fallback_on_error: true
+
+critic_sft:
+  model_name: "Qwen/Qwen2.5-7B-Instruct"
+  dataset_path: "training/data/critic_sft_train.jsonl"
+  output_dir: "training/artifacts/critic_sft_adapter"
+  max_steps: 200
+  num_train_epochs: 3.0
+  per_device_train_batch_size: 8
+  gradient_accumulation_steps: 2
+  learning_rate: 2.0e-4
+  warmup_ratio: 0.05
+  logging_steps: 5
+  save_steps: 50
+  max_seq_length: 512
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  seed: 42
+  report_to: "none"
+  wandb_project: "paper-pilot"
+  run_name: null
+  bf16: true
+  fallback_on_error: true
+
+dpo:
+  model_name: "Qwen/Qwen2.5-7B-Instruct"
+  dataset_path: "training/data/dpo_train.jsonl"
+  output_dir: "training/artifacts/critic_dpo_model"
+  max_steps: 200
+  num_train_epochs: 2.0
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 2
+  learning_rate: 5.0e-5
+  beta: 0.1
+  max_length: 512
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  logging_steps: 5
+  save_steps: 50
+  seed: 42
+  report_to: "none"
+  wandb_project: "paper-pilot"
+  run_name: null
+  bf16: true
+  fallback_on_error: true
+
+quantize:
+  model_name: "Qwen/Qwen2.5-7B-Instruct"
+  output_dir: "training/artifacts/qwen2.5-7b-awq"
+  bits: 4
+  group_size: 128
+  zero_point: true
+  calib_samples: 128
+  seed: 42
+  fallback_on_error: true

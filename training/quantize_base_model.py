@@ -6,7 +6,9 @@ import argparse
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
+from training.config_loader import load_training_section
 from training.data.generate_critic_sft_data import generate_critic_sft_dataset
 from training.data.generate_router_data import generate_router_dataset
 
@@ -17,6 +19,23 @@ DEFAULT_GROUP_SIZE = 128
 DEFAULT_ZERO_POINT = True
 DEFAULT_CALIB_SAMPLES = 128
 DEFAULT_SEED = 42
+DEFAULT_TRAINING_CONFIG = Path("training/training_config.yaml")
+
+
+def _quantize_defaults_from_section(section: dict[str, Any]) -> dict[str, Any]:
+    """Convert quantize YAML section to argparse defaults."""
+    if not section:
+        return {}
+    return {
+        "model_name": section.get("model_name"),
+        "output_dir": Path(section["output_dir"]) if section.get("output_dir") else None,
+        "bits": section.get("bits"),
+        "group_size": section.get("group_size"),
+        "calib_samples": section.get("calib_samples"),
+        "seed": section.get("seed"),
+        "no_zero_point": not section.get("zero_point", True),
+        "no_fallback": not section.get("fallback_on_error", True),
+    }
 
 
 @dataclass(slots=True)
@@ -108,6 +127,12 @@ def _write_fallback_artifact(config: QuantizeConfig, reason: str) -> QuantizeRes
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Quantize base model with AWQ.")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_TRAINING_CONFIG,
+        help="Path to training_config.yaml (defaults used if file exists).",
+    )
     parser.add_argument("--model-name", type=str, default=DEFAULT_MODEL_NAME)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--bits", type=int, default=DEFAULT_BITS)
@@ -124,7 +149,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def parse_config(argv: list[str] | None = None) -> QuantizeConfig:
-    args = build_arg_parser().parse_args(argv)
+    argv = argv if argv is not None else []
+    parser = build_arg_parser()
+    config_path = DEFAULT_TRAINING_CONFIG
+    if "--config" in argv:
+        i = argv.index("--config")
+        if i + 1 < len(argv):
+            config_path = Path(argv[i + 1])
+    section = load_training_section(config_path, "quantize")
+    defaults = {k: v for k, v in _quantize_defaults_from_section(section).items() if v is not None}
+    parser.set_defaults(**defaults)
+    args = parser.parse_args(argv)
     return QuantizeConfig(
         model_name=str(args.model_name),
         output_dir=Path(args.output_dir),

@@ -2,6 +2,8 @@
 
 This guide covers the full pipeline: data generation, Router/Critic SFT, Critic DPO, AWQ quantization, vLLM Multi-LoRA serving, and benchmark verification.
 
+**Config file:** Defaults for all training steps live in `training/training_config.yaml`. You can edit that file once; then run the scripts with no (or few) CLI args. Any CLI argument overrides the config file.
+
 ## 0) Environment
 
 ```bash
@@ -34,59 +36,43 @@ python training/data/generate_dpo_pairs.py --num-pairs 500 --output training/dat
 
 ## 2) Train Router LoRA (SFT)
 
+Using defaults from `training/training_config.yaml` (optional overrides with `--run-name`, `--report-to`, etc.):
+
 ```bash
-python training/sft_router.py \
-  --model-name Qwen/Qwen2.5-7B-Instruct \
-  --dataset training/data/router_train.jsonl \
-  --output-dir training/artifacts/router_lora_adapter \
-  --max_steps 200 --epochs 3 \
-  --batch-size 16 --grad-accum-steps 1 \
-  --lora-r 16 --lora-alpha 32 \
-  --target-modules q_proj,k_proj,v_proj,o_proj \
-  --max-seq-len 256 --bf16 \
-  --report-to wandb --wandb-project paper-pilot --run-name router-sft
+python training/sft_router.py
+```
+
+Example with overrides (e.g. wandb and run name):
+
+```bash
+python training/sft_router.py --report-to wandb --run-name router-sft
 ```
 
 ## 3) Train Critic LoRA (SFT Stage 1)
 
 ```bash
-python training/sft_critic.py \
-  --model-name Qwen/Qwen2.5-7B-Instruct \
-  --dataset training/data/critic_sft_train.jsonl \
-  --output-dir training/artifacts/critic_sft_adapter \
-  --max_steps 200 --epochs 3 \
-  --batch-size 8 --grad-accum-steps 2 \
-  --lora-r 16 --lora-alpha 32 \
-  --target-modules q_proj,k_proj,v_proj,o_proj \
-  --max-seq-len 512 --bf16 \
-  --report-to wandb --wandb-project paper-pilot --run-name critic-sft
+python training/sft_critic.py
 ```
+
+With wandb: `python training/sft_critic.py --report-to wandb --run-name critic-sft`
 
 ## 4) Train Critic LoRA (DPO Stage 2)
 
+Use the Critic SFT adapter as base (override in config or CLI):
+
 ```bash
-python training/dpo_critic.py \
-  --model-name training/artifacts/critic_sft_adapter \
-  --dataset training/data/dpo_train.jsonl \
-  --output-dir training/artifacts/critic_dpo_model \
-  --max_steps 200 --epochs 2 \
-  --batch-size 4 --grad-accum-steps 2 \
-  --learning-rate 5e-5 --beta 0.1 \
-  --max-length 512 \
-  --lora-r 16 --lora-alpha 32 \
-  --target-modules q_proj,k_proj,v_proj,o_proj \
-  --bf16 \
-  --report-to wandb --wandb-project paper-pilot --run-name critic-dpo
+python training/dpo_critic.py --model-name training/artifacts/critic_sft_adapter
 ```
+
+All other defaults (dataset, output-dir, lr, etc.) come from `training_config.yaml`. With wandb: add `--report-to wandb --run-name critic-dpo`.
 
 ## 5) Quantize Base Model to AWQ INT4
 
 ```bash
-python training/quantize_base_model.py \
-  --model-name Qwen/Qwen2.5-7B-Instruct \
-  --output-dir training/artifacts/qwen2.5-7b-awq \
-  --bits 4 --group-size 128 --calib-samples 128
+python training/quantize_base_model.py
 ```
+
+Defaults (model, output-dir, bits, group-size, calib-samples) are in `training_config.yaml`; override with CLI if needed.
 
 ## 6) Serve with vLLM Multi-LoRA
 
