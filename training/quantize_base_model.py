@@ -1,7 +1,8 @@
 """基座 Qwen 模型的 AWQ INT4 量化脚本。
 
-使用 AutoAWQ 对 HuggingFace 上的基座模型做 4-bit 量化，校准数据来自本仓库的 Router/Critic 合成数据，
-以保证量化后与下游 Router/Critic 任务分布更接近。输出目录可被 vLLM 等加载；支持 fallback 模式。
+使用 AutoAWQ 对 HuggingFace 上的基座模型做 4-bit 量化。校准数据优先从 training/data/router_train.jsonl
+与 critic_sft_train.jsonl 读取（需先运行 generate_all_with_llm.py）；无文件时使用最小占位文本。
+输出目录可被 vLLM 等加载；支持 fallback 模式。
 """
 
 from __future__ import annotations
@@ -13,8 +14,6 @@ from pathlib import Path
 from typing import Any
 
 from training.config_loader import load_training_section
-from training.data.generate_critic_sft_data import generate_critic_sft_dataset
-from training.data.generate_router_data import generate_router_dataset
 
 # ---------- 默认配置 ----------
 DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
@@ -105,15 +104,53 @@ def _run_real_quantization(config: QuantizeConfig) -> None:
     tokenizer.save_pretrained(str(config.output_dir))
 
 
-def _build_calibration_texts(calib_samples: int, *, seed: int) -> list[str]:
-    """用 Router 与 Critic 的合成数据拼出校准文本列表，供 AWQ 估计激活分布；总条数不超过 calib_samples。"""
-    router_rows = generate_router_dataset(samples_per_intent=max(1, calib_samples // 10), seed=seed)
-    critic_rows = generate_critic_sft_dataset(num_samples=max(1, calib_samples), seed=seed + 1)
+def _load_calibration_texts_from_jsonl(
+    router_path: Path,
+    critic_path: Path,
+    max_samples: int,
+) -> list[str]:
+    """从 LLM 生成的 JSONL 中读取 input 文本作为校准数据；文件不存在或为空时返回空列表。"""
     texts: list[str] = []
-    for row in router_rows:
-        texts.append(str(row.get("input", "")))
-    for row in critic_rows:
-        texts.append(str(row.get("input", "")))
+    for path in (router_path, critic_path):
+        if not path.exists():
+            continue
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                    t = row.get("input") or row.get("prompt")
+                    if t:
+                        texts.append(str(t))
+                except json.JSONDecodeError:
+                    continue
+                if len(texts) >= max_samples:
+                    return texts[:max_samples]
+    return texts[:max_samples]
+
+
+def _minimal_calibration_texts(n: int) -> list[str]:
+    """无 JSONL 时的最小校准文本（与 Router/Critic 任务句式接近），供量化使用。"""
+    pool = [
+        "Classify the user question into one intent type. Allowed types: factual, comparative, multi_hop, exploratory, follow_up.",
+        "What is LoRA and when would you use it?",
+        "Evaluate the answer quality for the given question and retrieved context. Score rubric: score, completeness, faithfulness.",
+        "Question: How does RAG improve factual consistency? Draft Answer: RAG retrieves documents and conditions the model.",
+    ]
+    return (pool * max(1, (n + len(pool) - 1) // len(pool)))[:n]
+
+
+def _build_calibration_texts(calib_samples: int, *, seed: int) -> list[str]:
+    """用 Router/Critic JSONL 的 input 文本做校准；无文件时用最小占位文本。总条数不超过 calib_samples。"""
+    root = Path(__file__).resolve().parent
+    data_dir = root / "data"
+    router_path = data_dir / "router_train.jsonl"
+    critic_path = data_dir / "critic_sft_train.jsonl"
+    texts = _load_calibration_texts_from_jsonl(router_path, critic_path, calib_samples)
+    if not texts:
+        texts = _minimal_calibration_texts(calib_samples)
     return texts[:calib_samples]
 
 

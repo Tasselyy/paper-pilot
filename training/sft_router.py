@@ -2,7 +2,7 @@
 
 在 Alpaca 格式的 Router 数据上微调因果语言模型（加 LoRA），使模型能根据用户问题输出意图类型
 （factual / comparative / multi_hop / exploratory / follow_up）及置信度。数据通常由
-training/data/generate_router_data.py 生成并写入 router_train.jsonl。支持 fallback 模式。
+training/data/generate_all_with_llm.py 生成（全 LLM），输出 router_train.jsonl。支持 fallback 模式。
 """
 
 from __future__ import annotations

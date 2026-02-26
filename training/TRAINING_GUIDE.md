@@ -28,12 +28,25 @@ Verify GPU:
 python -c "import torch; print(torch.cuda.get_device_name())"
 ```
 
-## 1) Generate Data
+## 1) Generate Data（全 LLM）
+
+训练数据统一由 LLM 生成（题目/草稿/上下文与 verdict 均来自 LLM）。需配置 `OPENAI_API_KEY` 并安装 `pip install openai`（或 `pip install -e ".[vllm]"`）。
+
+**一键生成（推荐）：**
 
 ```bash
-python training/data/generate_router_data.py --samples-per-intent 200 --output training/data/router_train.jsonl
-python training/data/generate_critic_sft_data.py --num-samples 800 --output training/data/critic_sft_train.jsonl
-python training/data/generate_dpo_pairs.py --num-pairs 500 --output training/data/dpo_train.jsonl
+# 从项目根目录执行；输出: training/data/router_train.jsonl, critic_sft_train.jsonl, dpo_train.jsonl
+python training/data/generate_all_with_llm.py
+```
+
+默认：`--full-scenario`（题目/草稿/上下文由 LLM 生成），`--scenarios 100` → 100 条 Critic SFT + 100 对 DPO；Router 每意图 40 条。可选：`--router-per-intent`、`--output-dir`、`--model`、`--api-base`。使用 `--no-full-scenario` 时仅 verdict 用 LLM、场景用固定池（更快），此时可用 `--critic-samples`、`--dpo-pairs` 指定条数。
+
+**按数据集单独生成（格式与上面一致）：**
+
+```bash
+python training/data/generate_router_data_with_llm.py --samples-per-intent 40 --output training/data/router_train.jsonl
+python training/data/generate_critic_sft_with_llm.py --num-samples 200 --output training/data/critic_sft_train.jsonl
+python training/data/generate_dpo_pairs_with_llm.py --num-pairs 200 --output training/data/dpo_train.jsonl
 ```
 
 ## 2) Train Router LoRA (SFT)

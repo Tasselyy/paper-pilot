@@ -1,7 +1,7 @@
 """Critic 答案质量评估模型的 LoRA SFT 训练脚本。
 
 在 instruction/input/output 格式的 Critic SFT 数据上微调因果语言模型（加 LoRA），
-得到可用于评估回答质量的 Critic 适配器。数据通常由 training/data/generate_critic_sft_data.py 生成。
+得到可用于评估回答质量的 Critic 适配器。数据由 training/data/generate_all_with_llm.py 全 LLM 生成（critic_sft_train.jsonl）。
 支持训练失败时写入 fallback 元数据目录，便于流水线在无 GPU 等环境下继续跑通。
 """
 

@@ -2,7 +2,7 @@
 
 在 (prompt, chosen, rejected) 偏好对上用 TRL 的 DPOTrainer 训练因果语言模型（可加 LoRA），
 使 Critic 更倾向输出高质量评判（chosen）而非低质量评判（rejected）。数据由
-training/data/generate_dpo_pairs.py 生成。训练结果保存到指定输出目录；支持 fallback 模式。
+training/data/generate_all_with_llm.py 生成（全 LLM，dpo_train.jsonl）。训练结果保存到指定输出目录；支持 fallback 模式。
 """
 
 from __future__ import annotations
