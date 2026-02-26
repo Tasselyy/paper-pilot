@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from src.agent.state import IntentType
+from src.types import IntentType
 from src.models.inference import (
     build_critic_evaluation_prompt,
     build_router_classification_prompt,

@@ -17,18 +17,11 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 
+from src.types import IntentType
+
 # ---------------------------------------------------------------------------
 # Type aliases
 # ---------------------------------------------------------------------------
-
-IntentType = Literal[
-    "factual",
-    "comparative",
-    "multi_hop",
-    "exploratory",
-    "follow_up",
-]
-"""Closed-set intent types produced by the Router (LoRA classifier)."""
 
 StrategyName = Literal["simple", "multi_hop", "comparative", "exploratory"]
 """Graph strategy node names mapped from ``IntentType``."""

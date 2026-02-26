@@ -8,15 +8,9 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Literal
+from typing import Any
 
-IntentType = Literal[
-    "factual",
-    "comparative",
-    "multi_hop",
-    "exploratory",
-    "follow_up",
-]
+from src.types import IntentType
 
 _VALID_INTENTS: set[str] = {
     "factual",
