@@ -11,23 +11,30 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-DEFAULT_MODEL_NAME = "sshleifer/tiny-gpt2"
+DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 DEFAULT_DATASET_PATH = Path("training/data/dpo_train.jsonl")
 DEFAULT_OUTPUT_DIR = Path("training/artifacts/critic_dpo_model")
 DEFAULT_MAX_STEPS = 200
 DEFAULT_NUM_EPOCHS = 1.0
-DEFAULT_BATCH_SIZE = 2
+DEFAULT_BATCH_SIZE = 4
 DEFAULT_GRAD_ACCUM_STEPS = 2
 DEFAULT_LEARNING_RATE = 5e-5
 DEFAULT_BETA = 0.1
-DEFAULT_MAX_LENGTH = 384
+DEFAULT_MAX_LENGTH = 512
 DEFAULT_LOGGING_STEPS = 5
 DEFAULT_SAVE_STEPS = 50
 DEFAULT_SEED = 42
+DEFAULT_LORA_R = 16
+DEFAULT_LORA_ALPHA = 32
+DEFAULT_LORA_DROPOUT = 0.05
+DEFAULT_TARGET_MODULES = ("q_proj", "k_proj", "v_proj", "o_proj")
+DEFAULT_REPORT_TO = "none"
+DEFAULT_WANDB_PROJECT = "paper-pilot"
 
 
 @dataclass(slots=True)
@@ -44,10 +51,17 @@ class DPOConfig:
     learning_rate: float
     beta: float
     max_length: int
+    lora_r: int
+    lora_alpha: int
+    lora_dropout: float
+    target_modules: list[str]
     logging_steps: int
     save_steps: int
     bf16: bool
     seed: int
+    report_to: str
+    wandb_project: str
+    run_name: str | None
     fallback_on_error: bool
 
 
@@ -141,6 +155,7 @@ def _run_real_dpo(*, config: DPOConfig, rows: list[dict[str, Any]]) -> None:
     """Run actual DPO training with TRL DPOTrainer."""
     try:
         from datasets import Dataset
+        from peft import LoraConfig, TaskType, get_peft_model
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         from trl import DPOConfig as TRLDPOConfig
@@ -156,7 +171,18 @@ def _run_real_dpo(*, config: DPOConfig, rows: list[dict[str, Any]]) -> None:
 
     dataset = Dataset.from_list(rows)
 
-    model = AutoModelForCausalLM.from_pretrained(config.model_name)
+    base_model = AutoModelForCausalLM.from_pretrained(config.model_name)
+    lora_config = LoraConfig(
+        r=config.lora_r,
+        lora_alpha=config.lora_alpha,
+        lora_dropout=config.lora_dropout,
+        task_type=TaskType.CAUSAL_LM,
+        target_modules=config.target_modules,
+    )
+    model = get_peft_model(base_model, lora_config)
+    if config.report_to == "wandb":
+        os.environ.setdefault("WANDB_PROJECT", config.wandb_project)
+
     training_args = TRLDPOConfig(
         output_dir=str(config.output_dir),
         per_device_train_batch_size=config.per_device_train_batch_size,
@@ -168,7 +194,8 @@ def _run_real_dpo(*, config: DPOConfig, rows: list[dict[str, Any]]) -> None:
         save_steps=config.save_steps,
         bf16=config.bf16,
         fp16=not config.bf16,
-        report_to="none",
+        report_to=config.report_to,
+        run_name=config.run_name,
         seed=config.seed,
         beta=config.beta,
         max_length=config.max_length,
@@ -182,7 +209,7 @@ def _run_real_dpo(*, config: DPOConfig, rows: list[dict[str, Any]]) -> None:
         train_dataset=dataset,
     )
     trainer.train()
-    trainer.save_model(str(config.output_dir))
+    model.save_pretrained(str(config.output_dir))
     tokenizer.save_pretrained(str(config.output_dir))
 
 
@@ -250,6 +277,34 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=DEFAULT_MAX_LENGTH,
         help="Max total sequence length.",
     )
+    parser.add_argument("--lora-r", type=int, default=DEFAULT_LORA_R, help="LoRA rank.")
+    parser.add_argument("--lora-alpha", type=int, default=DEFAULT_LORA_ALPHA, help="LoRA alpha.")
+    parser.add_argument("--lora-dropout", type=float, default=DEFAULT_LORA_DROPOUT, help="LoRA dropout.")
+    parser.add_argument(
+        "--target-modules",
+        type=str,
+        default=",".join(DEFAULT_TARGET_MODULES),
+        help="Comma-separated LoRA target modules.",
+    )
+    parser.add_argument(
+        "--report-to",
+        type=str,
+        choices=("none", "wandb"),
+        default=DEFAULT_REPORT_TO,
+        help="Training logger backend.",
+    )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default=DEFAULT_WANDB_PROJECT,
+        help="wandb project name when report_to=wandb.",
+    )
+    parser.add_argument(
+        "--run-name",
+        type=str,
+        default=None,
+        help="Optional run name for the tracker.",
+    )
     parser.add_argument(
         "--logging-steps",
         type=int,
@@ -284,6 +339,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def parse_config(argv: list[str] | None = None) -> DPOConfig:
     """Parse CLI args into DPOConfig."""
     args = build_arg_parser().parse_args(argv)
+    target_modules = [part.strip() for part in str(args.target_modules).split(",") if part.strip()]
     return DPOConfig(
         model_name=str(args.model_name),
         dataset_path=Path(args.dataset),
@@ -295,16 +351,29 @@ def parse_config(argv: list[str] | None = None) -> DPOConfig:
         learning_rate=float(args.learning_rate),
         beta=float(args.beta),
         max_length=int(args.max_length),
+        lora_r=int(args.lora_r),
+        lora_alpha=int(args.lora_alpha),
+        lora_dropout=float(args.lora_dropout),
+        target_modules=target_modules or list(DEFAULT_TARGET_MODULES),
         logging_steps=int(args.logging_steps),
         save_steps=int(args.save_steps),
         bf16=bool(args.bf16),
         seed=int(args.seed),
+        report_to=str(args.report_to),
+        wandb_project=str(args.wandb_project),
+        run_name=str(args.run_name) if args.run_name else None,
         fallback_on_error=not bool(args.no_fallback),
     )
 
 
 def main(argv: list[str] | None = None) -> None:
     """CLI entry point."""
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except Exception:
+        pass
     config = parse_config(argv)
     result = run_dpo(config)
     print(result.message)

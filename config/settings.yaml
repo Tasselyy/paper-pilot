@@ -45,3 +45,10 @@ memory:
 tracing:
   trace_dir: data/traces
   trace_file: trace.jsonl
+
+vllm:
+  enabled: false
+  base_url: http://localhost:8000/v1
+  api_key: token-placeholder
+  router_model: router-lora
+  critic_model: critic-lora

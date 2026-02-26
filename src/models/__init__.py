@@ -1,6 +1,10 @@
-"""Local model loading and inference helpers."""
+"""Local and vLLM model loading/inference helpers."""
 
 from src.models.loader import LocalModelManager, LocalModelUnavailableError
+from src.models.vllm_client import VLLMInferenceClient
 
-__all__ = ["LocalModelManager", "LocalModelUnavailableError"]
-"""Local model loader and inference."""
+__all__ = [
+    "LocalModelManager",
+    "LocalModelUnavailableError",
+    "VLLMInferenceClient",
+]

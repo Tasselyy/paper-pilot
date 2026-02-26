@@ -2,8 +2,8 @@
 
 Each row is a triple (prompt, chosen, rejected) in TRL DPO format:
 - prompt: instruction + question + draft answer (model input).
-- chosen: preferred verdict JSON (pass, high score).
-- rejected: dispreferred verdict JSON (fail, low score).
+- chosen: preferred verdict JSON (high score).
+- rejected: dispreferred verdict JSON (low score).
 
 Output JSONL can be loaded by ``datasets.load_dataset("json", data_files=...)``
 or by ``training/dpo_critic.py``.
@@ -17,19 +17,25 @@ import random
 from pathlib import Path
 from typing import Any
 
+from src.models.inference import build_critic_evaluation_prompt
+
 DEFAULT_PAIRS = 500
 DEFAULT_SEED = 42
 
 CRITIC_INSTRUCTION = (
-    "Evaluate the following Q&A on completeness and faithfulness. "
-    "Output a single JSON object with keys: passed (bool), score (0-10), "
-    "completeness (0-1), faithfulness (0-1), feedback (string)."
+    "Evaluate the answer quality for the given question and retrieved context.\n"
+    "Score rubric:\n"
+    "- score: overall quality in [0, 10]\n"
+    "- completeness: coverage in [0, 1]\n"
+    "- faithfulness: grounding in context in [0, 1]\n"
+    "Return ONLY valid JSON with keys: score, completeness, faithfulness, feedback.\n"
+    '{"score":7.8,"completeness":0.82,"faithfulness":0.86,'
+    '"feedback":"Add a concrete example."}'
 )
 
 
 def _verdict_json(
     *,
-    passed: bool,
     score: float,
     completeness: float,
     faithfulness: float,
@@ -37,7 +43,6 @@ def _verdict_json(
 ) -> str:
     """Serialize a critic verdict to a compact JSON string."""
     obj = {
-        "passed": passed,
         "score": round(score, 1),
         "completeness": round(completeness, 2),
         "faithfulness": round(faithfulness, 2),
@@ -68,11 +73,20 @@ def generate_dpo_dataset(
 
     questions = _sample_questions(rng, size=num_pairs)
     draft_answers = _sample_draft_answers(rng, size=num_pairs)
+    contexts_blocks = _sample_context_blocks(rng, size=num_pairs)
+    strategies = _sample_strategies(rng, size=num_pairs)
 
     for i in range(num_pairs):
         question = questions[i]
         draft = draft_answers[i]
-        prompt = _build_prompt(question=question, draft_answer=draft)
+        contexts = contexts_blocks[i]
+        strategy = strategies[i]
+        prompt = _build_prompt(
+            question=question,
+            draft_answer=draft,
+            contexts=contexts,
+            strategy=strategy,
+        )
         chosen = _build_chosen_verdict(rng=rng, idx=i)
         rejected = _build_rejected_verdict(rng=rng, idx=i)
         rows.append({"prompt": prompt, "chosen": chosen, "rejected": rejected})
@@ -80,13 +94,13 @@ def generate_dpo_dataset(
     return rows
 
 
-def _build_prompt(*, question: str, draft_answer: str) -> str:
+def _build_prompt(*, question: str, draft_answer: str, contexts: str, strategy: str) -> str:
     """Build the Critic input prompt (no verdict)."""
-    return (
-        f"{CRITIC_INSTRUCTION}\n\n"
-        f"Question: {question.strip()}\n\n"
-        f"Draft answer:\n{draft_answer.strip()}\n\n"
-        "JSON output:\n"
+    return build_critic_evaluation_prompt(
+        question=question,
+        draft_answer=draft_answer,
+        contexts=contexts,
+        strategy=strategy,
     )
 
 
@@ -106,7 +120,6 @@ def _build_chosen_verdict(*, rng: random.Random, idx: int) -> str:
         idx,
     )
     return _verdict_json(
-        passed=True,
         score=score,
         completeness=completeness,
         faithfulness=faithfulness,
@@ -131,7 +144,6 @@ def _build_rejected_verdict(*, rng: random.Random, idx: int) -> str:
         idx + 1,
     )
     return _verdict_json(
-        passed=False,
         score=score,
         completeness=completeness,
         faithfulness=faithfulness,
@@ -171,6 +183,26 @@ def _sample_draft_answers(rng: random.Random, size: int) -> list[str]:
         "Long-context modeling faces cost, attention complexity, and retrieval trade-offs.",
     )
     return [rng.choice(answers) for _ in range(size)]
+
+
+def _sample_context_blocks(rng: random.Random, size: int) -> list[str]:
+    """Sample synthetic context blocks formatted like runtime retrieval text."""
+    contexts = (
+        "[1] Source: LoRA Paper (2021)\nLoRA injects low-rank adapters into attention layers.\n\n"
+        "[2] Source: QLoRA (2023)\nQLoRA combines 4-bit quantization with LoRA fine-tuning.",
+        "[1] Source: RAG Survey\nRAG improves factual grounding by conditioning on retrieved passages.\n\n"
+        "[2] Source: Faithfulness Benchmarks\nGrounded generation reduces unsupported claims.",
+        "[1] Source: FlashAttention\nFlashAttention optimizes memory reads during attention.\n\n"
+        "[2] Source: Transformer Primer\nAttention complexity scales with sequence length.",
+        "(no retrieved contexts)",
+    )
+    return [rng.choice(contexts) for _ in range(size)]
+
+
+def _sample_strategies(rng: random.Random, size: int) -> list[str]:
+    """Sample agent strategy labels for critic prompts."""
+    strategies = ("simple", "comparative", "multi_hop", "exploratory")
+    return [rng.choice(strategies) for _ in range(size)]
 
 
 def _pick(rng: random.Random, choices: tuple[str, ...], idx: int) -> str:

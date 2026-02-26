@@ -1,8 +1,4 @@
-"""LoRA SFT training script for Router intent classification.
-
-This script trains a causal LM with LoRA adapters on the synthetic Router
-dataset generated in ``training/data/router_train.jsonl``.
-"""
+"""LoRA SFT training script for Critic answer quality evaluation."""
 
 from __future__ import annotations
 
@@ -14,17 +10,17 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
-DEFAULT_DATASET_PATH = Path("training/data/router_train.jsonl")
-DEFAULT_OUTPUT_DIR = Path("training/artifacts/router_lora_adapter")
+DEFAULT_DATASET_PATH = Path("training/data/critic_sft_train.jsonl")
+DEFAULT_OUTPUT_DIR = Path("training/artifacts/critic_sft_adapter")
 DEFAULT_MAX_STEPS = 200
 DEFAULT_NUM_EPOCHS = 3.0
-DEFAULT_BATCH_SIZE = 16
-DEFAULT_GRAD_ACCUM_STEPS = 1
+DEFAULT_BATCH_SIZE = 8
+DEFAULT_GRAD_ACCUM_STEPS = 2
 DEFAULT_LEARNING_RATE = 2e-4
 DEFAULT_WARMUP_RATIO = 0.05
 DEFAULT_LOGGING_STEPS = 5
 DEFAULT_SAVE_STEPS = 50
-DEFAULT_MAX_SEQ_LEN = 256
+DEFAULT_MAX_SEQ_LEN = 512
 DEFAULT_LORA_R = 16
 DEFAULT_LORA_ALPHA = 32
 DEFAULT_LORA_DROPOUT = 0.05
@@ -36,7 +32,7 @@ DEFAULT_WANDB_PROJECT = "paper-pilot"
 
 @dataclass(slots=True)
 class SFTConfig:
-    """Hyperparameters and file paths for Router LoRA SFT."""
+    """Hyperparameters and file paths for Critic LoRA SFT."""
 
     model_name: str
     dataset_path: Path
@@ -83,15 +79,8 @@ def build_prompt(*, instruction: str, input_text: str, output_text: str) -> str:
     )
 
 
-def load_router_rows(dataset_path: Path) -> list[dict[str, Any]]:
-    """Load Router training rows from JSONL.
-
-    Args:
-        dataset_path: JSONL path with Alpaca-style fields.
-
-    Returns:
-        Parsed rows as dictionaries.
-    """
+def load_rows(dataset_path: Path) -> list[dict[str, Any]]:
+    """Load Critic SFT rows from JSONL."""
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
@@ -109,7 +98,6 @@ def load_router_rows(dataset_path: Path) -> list[dict[str, Any]]:
 
 
 def _write_fallback_artifact(config: SFTConfig, reason: str) -> TrainingResult:
-    """Create adapter-like output folder so workflow can proceed in constrained envs."""
     config.output_dir.mkdir(parents=True, exist_ok=True)
     metadata = {
         "status": "fallback",
@@ -121,30 +109,18 @@ def _write_fallback_artifact(config: SFTConfig, reason: str) -> TrainingResult:
         },
     }
     metadata_path = config.output_dir / "fallback_metadata.json"
-    metadata_path.write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    message = (
-        "Training fallback completed. "
-        f"Adapter artifact directory prepared at: {config.output_dir}"
-    )
+    metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
     return TrainingResult(
         adapter_dir=config.output_dir,
         used_fallback=True,
-        message=message,
+        message=f"Training fallback completed. Adapter artifact ready at: {config.output_dir}",
     )
 
 
 def run_sft(config: SFTConfig) -> TrainingResult:
-    """Run LoRA SFT training and persist adapter.
-
-    If training dependencies are unavailable (or training fails) and
-    ``fallback_on_error`` is enabled, an adapter artifact directory is still
-    generated with diagnostic metadata.
-    """
+    """Run LoRA SFT training and persist adapter."""
     try:
-        rows = load_router_rows(config.dataset_path)
+        rows = load_rows(config.dataset_path)
         training_texts = [
             build_prompt(
                 instruction=str(row.get("instruction", "")),
@@ -154,11 +130,10 @@ def run_sft(config: SFTConfig) -> TrainingResult:
             for row in rows
         ]
         _run_real_training(config=config, training_texts=training_texts)
-        message = f"LoRA SFT finished. Adapter saved to: {config.output_dir}"
         return TrainingResult(
             adapter_dir=config.output_dir,
             used_fallback=False,
-            message=message,
+            message=f"Critic LoRA SFT finished. Adapter saved to: {config.output_dir}",
         )
     except Exception as exc:
         if not config.fallback_on_error:
@@ -167,7 +142,6 @@ def run_sft(config: SFTConfig) -> TrainingResult:
 
 
 def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
-    """Run actual LoRA fine-tuning with transformers + peft + datasets."""
     try:
         from datasets import Dataset
         from peft import LoraConfig, TaskType, get_peft_model
@@ -178,11 +152,8 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
             Trainer,
             TrainingArguments,
         )
-    except Exception as exc:  # pragma: no cover - depends on optional deps
-        raise RuntimeError(
-            "Missing training dependencies. Install with: "
-            "pip install -e .[training]"
-        ) from exc
+    except Exception as exc:
+        raise RuntimeError("Missing training dependencies. Install with: pip install -e .[training]") from exc
 
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)
     if tokenizer.pad_token is None:
@@ -191,20 +162,11 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
     dataset = Dataset.from_dict({"text": training_texts})
 
     def _tokenize(batch: dict[str, list[str]]) -> dict[str, list[list[int]]]:
-        tokenized = tokenizer(
-            batch["text"],
-            truncation=True,
-            max_length=config.max_seq_length,
-        )
+        tokenized = tokenizer(batch["text"], truncation=True, max_length=config.max_seq_length)
         tokenized["labels"] = [ids.copy() for ids in tokenized["input_ids"]]
         return tokenized
 
-    tokenized_dataset = dataset.map(
-        _tokenize,
-        batched=True,
-        remove_columns=["text"],
-    )
-
+    tokenized_dataset = dataset.map(_tokenize, batched=True, remove_columns=["text"])
     base_model = AutoModelForCausalLM.from_pretrained(config.model_name)
     lora_config = LoraConfig(
         r=config.lora_r,
@@ -214,11 +176,10 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
         target_modules=config.target_modules,
     )
     model = get_peft_model(base_model, lora_config)
-
-    config.output_dir.mkdir(parents=True, exist_ok=True)
     if config.report_to == "wandb":
         os.environ.setdefault("WANDB_PROJECT", config.wandb_project)
 
+    config.output_dir.mkdir(parents=True, exist_ok=True)
     training_args = TrainingArguments(
         output_dir=str(config.output_dir),
         overwrite_output_dir=True,
@@ -248,84 +209,33 @@ def _run_real_training(*, config: SFTConfig, training_texts: list[str]) -> None:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build CLI argument parser."""
-    parser = argparse.ArgumentParser(description="Train Router LoRA adapter with SFT.")
-    parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME, help="Base model for LoRA SFT.")
-    parser.add_argument(
-        "--dataset",
-        type=Path,
-        default=DEFAULT_DATASET_PATH,
-        help="Router JSONL dataset path.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=DEFAULT_OUTPUT_DIR,
-        help="Adapter output directory.",
-    )
-    parser.add_argument("--max_steps", type=int, default=DEFAULT_MAX_STEPS, help="Maximum optimizer steps.")
-    parser.add_argument("--epochs", type=float, default=DEFAULT_NUM_EPOCHS, help="Number of training epochs.")
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=DEFAULT_BATCH_SIZE,
-        help="Per-device train batch size.",
-    )
-    parser.add_argument(
-        "--grad-accum-steps",
-        type=int,
-        default=DEFAULT_GRAD_ACCUM_STEPS,
-        help="Gradient accumulation steps.",
-    )
-    parser.add_argument("--learning-rate", type=float, default=DEFAULT_LEARNING_RATE, help="Learning rate.")
-    parser.add_argument("--warmup-ratio", type=float, default=DEFAULT_WARMUP_RATIO, help="Warmup ratio.")
-    parser.add_argument("--logging-steps", type=int, default=DEFAULT_LOGGING_STEPS, help="Logging interval.")
-    parser.add_argument("--save-steps", type=int, default=DEFAULT_SAVE_STEPS, help="Checkpoint save interval.")
-    parser.add_argument("--max-seq-len", type=int, default=DEFAULT_MAX_SEQ_LEN, help="Tokenizer max length.")
-    parser.add_argument("--lora-r", type=int, default=DEFAULT_LORA_R, help="LoRA rank.")
-    parser.add_argument("--lora-alpha", type=int, default=DEFAULT_LORA_ALPHA, help="LoRA alpha.")
-    parser.add_argument("--lora-dropout", type=float, default=DEFAULT_LORA_DROPOUT, help="LoRA dropout.")
-    parser.add_argument(
-        "--target-modules",
-        type=str,
-        default=",".join(DEFAULT_TARGET_MODULES),
-        help="Comma-separated LoRA target modules.",
-    )
-    parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Random seed.")
-    parser.add_argument(
-        "--report-to",
-        type=str,
-        choices=("none", "wandb"),
-        default=DEFAULT_REPORT_TO,
-        help="Training logger backend.",
-    )
-    parser.add_argument(
-        "--wandb-project",
-        type=str,
-        default=DEFAULT_WANDB_PROJECT,
-        help="wandb project name when report_to=wandb.",
-    )
-    parser.add_argument(
-        "--run-name",
-        type=str,
-        default=None,
-        help="Optional run name for the tracker.",
-    )
-    parser.add_argument(
-        "--bf16",
-        action="store_true",
-        help="Use bf16 precision (defaults to fp16 when available).",
-    )
-    parser.add_argument(
-        "--no-fallback",
-        action="store_true",
-        help="Disable fallback mode and raise errors directly.",
-    )
+    parser = argparse.ArgumentParser(description="Train Critic LoRA adapter with SFT.")
+    parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
+    parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET_PATH)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--max_steps", type=int, default=DEFAULT_MAX_STEPS)
+    parser.add_argument("--epochs", type=float, default=DEFAULT_NUM_EPOCHS)
+    parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
+    parser.add_argument("--grad-accum-steps", type=int, default=DEFAULT_GRAD_ACCUM_STEPS)
+    parser.add_argument("--learning-rate", type=float, default=DEFAULT_LEARNING_RATE)
+    parser.add_argument("--warmup-ratio", type=float, default=DEFAULT_WARMUP_RATIO)
+    parser.add_argument("--logging-steps", type=int, default=DEFAULT_LOGGING_STEPS)
+    parser.add_argument("--save-steps", type=int, default=DEFAULT_SAVE_STEPS)
+    parser.add_argument("--max-seq-len", type=int, default=DEFAULT_MAX_SEQ_LEN)
+    parser.add_argument("--lora-r", type=int, default=DEFAULT_LORA_R)
+    parser.add_argument("--lora-alpha", type=int, default=DEFAULT_LORA_ALPHA)
+    parser.add_argument("--lora-dropout", type=float, default=DEFAULT_LORA_DROPOUT)
+    parser.add_argument("--target-modules", type=str, default=",".join(DEFAULT_TARGET_MODULES))
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument("--report-to", type=str, choices=("none", "wandb"), default=DEFAULT_REPORT_TO)
+    parser.add_argument("--wandb-project", type=str, default=DEFAULT_WANDB_PROJECT)
+    parser.add_argument("--run-name", type=str, default=None)
+    parser.add_argument("--bf16", action="store_true")
+    parser.add_argument("--no-fallback", action="store_true")
     return parser
 
 
 def parse_config(argv: list[str] | None = None) -> SFTConfig:
-    """Parse CLI args into ``SFTConfig``."""
     args = build_arg_parser().parse_args(argv)
     target_modules = [part.strip() for part in str(args.target_modules).split(",") if part.strip()]
     return SFTConfig(
@@ -355,7 +265,6 @@ def parse_config(argv: list[str] | None = None) -> SFTConfig:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """CLI entry point."""
     try:
         from dotenv import load_dotenv
 

@@ -157,6 +157,16 @@ class TracingConfig(BaseModel):
     )
 
 
+class VLLMConfig(BaseModel):
+    """vLLM OpenAI-compatible endpoint configuration."""
+
+    enabled: bool = False
+    base_url: str = "http://localhost:8000/v1"
+    api_key: str = "token-placeholder"
+    router_model: str | None = None
+    critic_model: str | None = None
+
+
 class Settings(BaseModel):
     """Top-level application settings.
 
@@ -168,6 +178,7 @@ class Settings(BaseModel):
     agent: AgentConfig = Field(default_factory=AgentConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     tracing: TracingConfig = Field(default_factory=TracingConfig)
+    vllm: VLLMConfig = Field(default_factory=VLLMConfig)
 
 
 # ---------------------------------------------------------------------------

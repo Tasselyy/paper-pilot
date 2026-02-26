@@ -20,6 +20,28 @@ class TestGraphSkeleton:
         graph = build_main_graph()
         assert graph is not None
 
+    def test_graph_compiles_with_local_router_and_critic_params(self) -> None:
+        """build_main_graph() should accept local_router/local_critic args."""
+
+        class _LocalRouter:
+            def classify_question(self, question: str) -> tuple[str, float]:
+                return "factual", 0.9
+
+        class _LocalCritic:
+            def evaluate_answer(self, **_: object) -> dict[str, object]:
+                return {
+                    "score": 8.0,
+                    "completeness": 0.8,
+                    "faithfulness": 0.9,
+                    "feedback": "ok",
+                }
+
+        graph = build_main_graph(
+            local_router=_LocalRouter(),
+            local_critic=_LocalCritic(),
+        )
+        assert graph is not None
+
     def test_graph_has_expected_nodes(self) -> None:
         """The compiled graph should contain all registered nodes."""
         graph = build_main_graph()

@@ -16,6 +16,7 @@ Design reference: PAPER_PILOT_DESIGN.md §6.7, DEV_SPEC D1.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Protocol
 
 from langchain_core.language_models import BaseChatModel
@@ -170,6 +171,7 @@ async def run_critic(
 
     if local_critic is not None:
         try:
+            t0 = time.perf_counter()
             local_result = local_critic.evaluate_answer(
                 question=question,
                 draft_answer=draft_answer,
@@ -177,6 +179,7 @@ async def run_critic(
                 strategy=strategy,
                 pass_threshold=CRITIC_PASS_THRESHOLD,
             )
+            llm_call_ms = (time.perf_counter() - t0) * 1000
             local_output = CriticOutput(
                 score=float(local_result.get("score", 5.0)),
                 completeness=float(local_result.get("completeness", 0.5)),
@@ -231,6 +234,7 @@ async def run_critic(
                     "passed": passed,
                     "feedback_preview": feedback[:200],
                     "source": source,
+                    "llm_call_duration_ms": round(llm_call_ms, 1),
                 },
             )
             return {
@@ -287,7 +291,9 @@ async def run_critic(
 
     # -- Invoke LLM with structured output ----------------------------------
     structured_llm = llm.with_structured_output(CriticOutput)
+    t0 = time.perf_counter()
     critic_output: CriticOutput = await structured_llm.ainvoke(messages)
+    llm_call_ms = (time.perf_counter() - t0) * 1000
 
     score = critic_output.score
     completeness = critic_output.completeness
@@ -328,6 +334,7 @@ async def run_critic(
             "passed": passed,
             "feedback_preview": feedback[:200],
             "source": source,
+            "llm_call_duration_ms": round(llm_call_ms, 1),
         },
     )
 

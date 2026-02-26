@@ -26,6 +26,7 @@ from src.agent.nodes.critic import (
     critic_node,
     run_critic,
 )
+from src.agent.graph import build_main_graph
 from src.agent.state import (
     AgentState,
     CriticVerdict,
@@ -354,6 +355,8 @@ class TestRunCriticTrace:
         assert metadata["faithfulness"] == 0.5
         assert metadata["passed"] is False
         assert "feedback_preview" in metadata
+        assert "llm_call_duration_ms" in metadata
+        assert isinstance(metadata["llm_call_duration_ms"], float)
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +511,7 @@ class TestRunCriticDictState:
         assert len(local_critic.calls) == 1
         mock_llm.with_structured_output.assert_not_called()
         assert result["reasoning_trace"][0].metadata["source"] == "local"
+        assert "llm_call_duration_ms" in result["reasoning_trace"][0].metadata
 
     async def test_fallback_to_cloud_when_local_critic_fails(self) -> None:
         """Critic should fall back to cloud evaluation on local errors."""
@@ -625,3 +629,32 @@ class TestCriticNodePlaceholder:
         verdict = result["critic_verdict"]
         assert 0.0 <= verdict.completeness <= 1.0
         assert 0.0 <= verdict.faithfulness <= 1.0
+
+
+def test_local_critic_wired_through_graph() -> None:
+    """Graph should use local_critic when provided to build_main_graph()."""
+
+    class _LocalRouter:
+        def classify_question(self, question: str) -> tuple[str, float]:
+            return "factual", 0.9
+
+    class _LocalCritic:
+        def evaluate_answer(self, **_: object) -> dict[str, object]:
+            return {
+                "score": 8.7,
+                "completeness": 0.84,
+                "faithfulness": 0.92,
+                "feedback": "good",
+            }
+
+    graph = build_main_graph(local_router=_LocalRouter(), local_critic=_LocalCritic())
+    result = graph.invoke(
+        {"question": "What is LoRA?"},
+        config={"configurable": {"thread_id": "critic-local-wire-1"}},
+    )
+    trace = result.get("reasoning_trace", [])
+    critique_steps = [step for step in trace if getattr(step, "step_type", None) == "critique"]
+    assert critique_steps, "Expected critique reasoning step in graph trace"
+    metadata = critique_steps[0].metadata
+    assert metadata.get("source") == "local"
+    assert "llm_call_duration_ms" in metadata

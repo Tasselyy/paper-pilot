@@ -25,6 +25,7 @@ from src.agent.nodes.router import (
     router_node,
     run_router,
 )
+from src.agent.graph import build_main_graph
 from src.agent.state import AgentState, Intent, ReasoningStep
 from src.prompts.router import ROUTER_SYSTEM_PROMPT, ROUTER_USER_TEMPLATE
 
@@ -237,6 +238,8 @@ class TestRunRouter:
         assert metadata["intent_type"] == "comparative"
         assert metadata["confidence"] == 0.87
         assert "question_preview" in metadata
+        assert "llm_call_duration_ms" in metadata
+        assert isinstance(metadata["llm_call_duration_ms"], float)
 
     async def test_llm_receives_correct_prompts(self) -> None:
         """LLM should receive system prompt and formatted user message."""
@@ -298,6 +301,7 @@ class TestRunRouter:
         assert local_router.calls == ["What are recent PEFT trends?"]
         mock_llm.with_structured_output.assert_not_called()
         assert result["reasoning_trace"][0].metadata["source"] == "local"
+        assert "llm_call_duration_ms" in result["reasoning_trace"][0].metadata
 
     async def test_fallback_to_cloud_when_local_router_fails(self) -> None:
         """Router should fall back to cloud classification on local errors."""
@@ -441,3 +445,32 @@ class TestIntentStrategyMapping:
         result = await run_router(state, mock_llm)
 
         assert result["intent"].to_strategy() == expected_strategy
+
+
+def test_local_router_wired_through_graph() -> None:
+    """Graph should use local_router when provided to build_main_graph()."""
+
+    class _LocalRouter:
+        def classify_question(self, question: str) -> tuple[str, float]:
+            return "comparative", 0.91
+
+    class _LocalCritic:
+        def evaluate_answer(self, **_: object) -> dict[str, object]:
+            return {
+                "score": 8.0,
+                "completeness": 0.8,
+                "faithfulness": 0.9,
+                "feedback": "ok",
+            }
+
+    graph = build_main_graph(local_router=_LocalRouter(), local_critic=_LocalCritic())
+    result = graph.invoke(
+        {"question": "Compare LoRA and QLoRA"},
+        config={"configurable": {"thread_id": "router-local-wire-1"}},
+    )
+    trace = result.get("reasoning_trace", [])
+    route_steps = [step for step in trace if getattr(step, "step_type", None) == "route"]
+    assert route_steps, "Expected route reasoning step in graph trace"
+    metadata = route_steps[0].metadata
+    assert metadata.get("source") == "local"
+    assert "llm_call_duration_ms" in metadata

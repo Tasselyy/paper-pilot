@@ -162,6 +162,8 @@ async def run_agent(
     # ── Build graph ────────────────────────────────────────
     rag = None
     llm = None
+    local_router = None
+    local_critic = None
 
     if not dry_run and settings is not None:
         from src.llm.client import create_llm
@@ -169,6 +171,17 @@ async def run_agent(
         from src.tools.tool_wrapper import RAGToolWrapper
 
         llm = create_llm(settings.llm)
+        if settings.vllm.enabled:
+            from src.models.vllm_client import VLLMInferenceClient
+
+            vllm_client = VLLMInferenceClient(
+                base_url=settings.vllm.base_url,
+                api_key=settings.vllm.api_key,
+                router_model=settings.vllm.router_model,
+                critic_model=settings.vllm.critic_model,
+            )
+            local_router = vllm_client
+            local_critic = vllm_client
         mcp_manager = MCPClientManager(settings.mcp)
         server_names = mcp_manager.get_server_names()
         if not server_names:
@@ -197,6 +210,8 @@ async def run_agent(
                 rag=rag,
                 llm=llm,
                 rag_default_collection=rag_default_collection,
+                local_router=local_router,
+                local_critic=local_critic,
             )
             thread_id = uuid.uuid4().hex[:12]
             graph_config: dict[str, Any] = {
@@ -250,6 +265,8 @@ async def run_agent(
         rag=rag,
         llm=llm,
         rag_default_collection=rag_default_collection,
+        local_router=local_router,
+        local_critic=local_critic,
     )
 
     # ── Configure run ──────────────────────────────────────

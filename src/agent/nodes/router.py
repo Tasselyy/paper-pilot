@@ -15,6 +15,7 @@ Design reference: PAPER_PILOT_DESIGN.md §6.1, DEV_SPEC C1.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Protocol
 
 from langchain_core.language_models import BaseChatModel
@@ -111,7 +112,9 @@ async def run_router(
 
     if local_router is not None:
         try:
+            t0 = time.perf_counter()
             local_intent_type, local_confidence = local_router.classify_question(question)
+            llm_call_ms = (time.perf_counter() - t0) * 1000
             validated = RouterOutput(type=local_intent_type, confidence=local_confidence)
             intent_type = validated.type
             confidence = validated.confidence
@@ -144,6 +147,7 @@ async def run_router(
                     "confidence": confidence,
                     "question_preview": question[:100],
                     "source": source,
+                    "llm_call_duration_ms": round(llm_call_ms, 1),
                 },
             )
             return {
@@ -188,7 +192,9 @@ async def run_router(
 
     # -- Invoke LLM with structured output ---
     structured_llm = llm.with_structured_output(RouterOutput)
+    t0 = time.perf_counter()
     router_output: RouterOutput = await structured_llm.ainvoke(messages)
+    llm_call_ms = (time.perf_counter() - t0) * 1000
 
     intent_type = router_output.type
     confidence = router_output.confidence
@@ -217,6 +223,7 @@ async def run_router(
             "confidence": confidence,
             "question_preview": question[:100],
             "source": source,
+            "llm_call_duration_ms": round(llm_call_ms, 1),
         },
     )
 

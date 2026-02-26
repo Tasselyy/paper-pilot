@@ -19,7 +19,7 @@ from training.sft_router import (
 def _make_config(tmp_path: Path, dataset_path: Path) -> SFTConfig:
     """Build a small test config for sft router script."""
     return SFTConfig(
-        model_name="sshleifer/tiny-gpt2",
+        model_name="Qwen/Qwen2.5-7B-Instruct",
         dataset_path=dataset_path,
         output_dir=tmp_path / "adapter_out",
         max_steps=1,
@@ -34,8 +34,12 @@ def _make_config(tmp_path: Path, dataset_path: Path) -> SFTConfig:
         lora_r=4,
         lora_alpha=8,
         lora_dropout=0.05,
+        target_modules=["q_proj", "v_proj"],
         bf16=False,
         seed=123,
+        report_to="none",
+        wandb_project="paper-pilot",
+        run_name=None,
         fallback_on_error=True,
     )
 
@@ -134,10 +138,22 @@ def test_parse_config_applies_overrides(tmp_path: Path) -> None:
             str(output_dir),
             "--max_steps",
             "10",
+            "--target-modules",
+            "q_proj,k_proj,v_proj,o_proj",
+            "--report-to",
+            "wandb",
+            "--wandb-project",
+            "paper-pilot",
+            "--run-name",
+            "router-sft-test",
             "--no-fallback",
         ]
     )
     assert config.dataset_path == dataset_file
     assert config.output_dir == output_dir
     assert config.max_steps == 10
+    assert config.target_modules == ["q_proj", "k_proj", "v_proj", "o_proj"]
+    assert config.report_to == "wandb"
+    assert config.wandb_project == "paper-pilot"
+    assert config.run_name == "router-sft-test"
     assert config.fallback_on_error is False

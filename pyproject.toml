@@ -34,12 +34,17 @@ training = [
     "bitsandbytes>=0.45.0",
     "accelerate>=1.3.0",
     "torch>=2.5.0",
+    "wandb>=0.18.0",
+    "autoawq>=0.2.9",
 ]
 local-models = [
     "transformers>=4.48.0",
     "bitsandbytes>=0.45.0",
     "accelerate>=1.3.0",
     "torch>=2.5.0",
+]
+vllm = [
+    "openai>=1.51.0",
 ]
 dev = [
     "pytest>=8.0",

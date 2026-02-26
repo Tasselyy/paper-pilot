@@ -19,7 +19,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from src.agent.edges import critic_gate, route_by_intent
-from src.agent.nodes.critic import create_critic_node, critic_node
+from src.agent.nodes.critic import create_critic_node
 from src.agent.nodes.format_output import format_output_node
 from src.agent.nodes.memory_nodes import (
     create_load_memory_node,
@@ -28,7 +28,7 @@ from src.agent.nodes.memory_nodes import (
     save_memory_node,
 )
 from src.agent.nodes.retry_refine import create_retry_refine_node, retry_refine_node
-from src.agent.nodes.router import create_router_node, router_node
+from src.agent.nodes.router import create_router_node
 from src.agent.nodes.slot_filling import create_slot_filling_node, slot_filling_node
 from src.agent.state import AgentState
 from src.agent.strategies.comparative import (
@@ -51,6 +51,8 @@ from src.agent.strategies.simple import (
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
+    from src.agent.nodes.critic import LocalCriticEvaluator
+    from src.agent.nodes.router import LocalRouterClassifier
     from src.memory.long_term import LongTermMemory
     from src.tools.tool_wrapper import RAGToolWrapper
 
@@ -62,6 +64,8 @@ def build_main_graph(
     rag_default_collection: str | None = None,
     long_term_memory: LongTermMemory | None = None,
     memory_llm: BaseChatModel | None = None,
+    local_router: LocalRouterClassifier | None = None,
+    local_critic: LocalCriticEvaluator | None = None,
 ) -> StateGraph:
     """Build and return the compiled main agent graph.
 
@@ -111,14 +115,14 @@ def build_main_graph(
         _exploratory_node = exploratory_strategy_node
 
     if llm is not None:
-        _router_node = create_router_node(llm)
+        _router_node = create_router_node(llm, local_router=local_router)
         _slot_filling_node = create_slot_filling_node(llm)
-        _critic_node = create_critic_node(llm)
+        _critic_node = create_critic_node(llm, local_critic=local_critic)
         _retry_refine_node = create_retry_refine_node(llm)
     else:
-        _router_node = router_node
+        _router_node = create_router_node(None, local_router=local_router)
         _slot_filling_node = slot_filling_node
-        _critic_node = critic_node
+        _critic_node = create_critic_node(None, local_critic=local_critic)
         _retry_refine_node = retry_refine_node
 
     if long_term_memory is not None:

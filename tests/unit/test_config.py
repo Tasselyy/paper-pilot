@@ -145,6 +145,7 @@ class TestSettings:
         assert settings.agent.max_react_steps == 5
         assert settings.memory.memory_file == "data/long_term_memory.jsonl"
         assert settings.tracing.trace_dir == "data/traces"
+        assert settings.vllm.enabled is False
 
     def test_settings_missing_llm_raises(self) -> None:
         with pytest.raises(ValueError):
