@@ -1,6 +1,7 @@
 # local docs
 thoughts.md
 docs/
+wandb/
 # Python
 __pycache__/
 *.py[cod]
