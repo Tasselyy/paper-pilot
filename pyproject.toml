@@ -27,7 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 training = [
-    "transformers>=4.48.0,<5.0.0",  # AutoAWQ incompatible with Transformers 5.x (Qwen2 attention_type)
+    "transformers==4.51.3",  # AutoAWQ last tested; 4.48–4.50 miss PytorchGELUTanh; 5.x breaks Qwen2
     "peft>=0.18.1",
     "trl>=0.28.0",
     "datasets>=2.21.0",

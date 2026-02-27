@@ -83,7 +83,7 @@ All other defaults (dataset, output-dir, lr, etc.) come from `training_config.ya
 
 ## 5) Quantize Base Model to AWQ INT4
 
-**Note:** AutoAWQ works only with Transformers 4.x. The `.[training]` extra pins `transformers<5.0.0` for compatibility. If you upgraded Transformers to 5.x elsewhere, reinstall with `pip install -e ".[training]"` so the resolver picks 4.x for this project.
+**Note:** AutoAWQ works only with Transformers 4.51.3 (last tested). The `.[training]` extra pins `transformers==4.51.3`. Reinstall with `pip install -e ".[training]"` if you see import errors from `awq` or `transformers.activations`.
 
 ```bash
 python training/quantize_base_model.py
