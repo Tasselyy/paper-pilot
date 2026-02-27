@@ -49,6 +49,7 @@ local-models = [
 ]
 vllm = [
     "openai>=1.51.0",
+    "gguf>=0.17.0",  # vLLM needs Keys, VisionProjectorType from gguf.constants
 ]
 dev = [
     "pytest>=8.0",

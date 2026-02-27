@@ -100,6 +100,8 @@ Defaults (model, output-dir, bits, group-size, calib-samples) are in `training_c
 
 ## 6) Serve with vLLM Multi-LoRA
 
+**If you see** `ImportError: cannot import name 'Keys' from 'gguf.constants'`, **upgrade gguf:** `pip install "gguf>=0.17.0"` (vLLM requires this for GGUF support).
+
 ```bash
 vllm serve training/artifacts/qwen2.5-7b-awq \
   --enable-lora \
