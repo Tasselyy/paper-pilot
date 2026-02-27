@@ -27,7 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 training = [
-    "transformers==4.51.3",  # AutoAWQ last tested; 4.48–4.50 miss PytorchGELUTanh; 5.x breaks Qwen2
+    "transformers>=4.56.2",  # TRL 0.28+ requirement
     "peft>=0.18.1",
     "trl>=0.28.0",
     "datasets>=2.21.0",
@@ -35,7 +35,11 @@ training = [
     "accelerate>=1.3.0",
     "torch>=2.5.0",
     "wandb>=0.18.0",
+]
+quantize = [
+    "transformers==4.51.3",  # AutoAWQ last tested; use separate env: pip install -e ".[quantize]"
     "autoawq>=0.2.9",
+    "torch>=2.5.0",
 ]
 local-models = [
     "transformers>=4.48.0",

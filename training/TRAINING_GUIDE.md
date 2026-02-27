@@ -83,7 +83,14 @@ All other defaults (dataset, output-dir, lr, etc.) come from `training_config.ya
 
 ## 5) Quantize Base Model to AWQ INT4
 
-**Note:** AutoAWQ works only with Transformers 4.51.3 (last tested). The `.[training]` extra pins `transformers==4.51.3`. Reinstall with `pip install -e ".[training]"` if you see import errors from `awq` or `transformers.activations`.
+**Note:** AutoAWQ requires Transformers 4.51.3, which conflicts with TRL (which needs ≥4.56.2). Run step 5 in a **separate virtualenv** with the `quantize` extra only:
+
+```bash
+python -m venv .venv-quantize
+. .venv-quantize/bin/activate   # Windows: .venv-quantize\Scripts\Activate.ps1
+pip install -U pip && pip install -e ".[quantize]"
+python training/quantize_base_model.py
+```
 
 ```bash
 python training/quantize_base_model.py
