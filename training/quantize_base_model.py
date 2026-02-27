@@ -9,9 +9,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+import traceback
+import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+# Suppress known third-party deprecation noise so the real error is visible
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="awq")
+warnings.filterwarnings("ignore", message=".*SwigPy.*__module__.*")
+warnings.filterwarnings("ignore", message=".*torch.jit.script.*")
+warnings.filterwarnings("ignore", message=".*swigvarlink.*")
 
 from training.config_loader import load_training_section
 
@@ -75,6 +84,7 @@ def run_quantization(config: QuantizeConfig) -> QuantizeResult:
             message=f"AWQ quantization finished. Artifacts saved to: {config.output_dir}",
         )
     except Exception as exc:
+        traceback.print_exc(file=sys.stderr)
         if not config.fallback_on_error:
             raise
         return _write_fallback_artifact(config=config, reason=str(exc))
@@ -230,4 +240,4 @@ def main(argv: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
