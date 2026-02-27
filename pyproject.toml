@@ -27,7 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 training = [
-    "transformers>=4.48.0",
+    "transformers>=4.48.0,<5.0.0",  # AutoAWQ incompatible with Transformers 5.x (Qwen2 attention_type)
     "peft>=0.18.1",
     "trl>=0.28.0",
     "datasets>=2.21.0",

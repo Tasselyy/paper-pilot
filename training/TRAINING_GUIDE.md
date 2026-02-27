@@ -83,11 +83,13 @@ All other defaults (dataset, output-dir, lr, etc.) come from `training_config.ya
 
 ## 5) Quantize Base Model to AWQ INT4
 
+**Note:** AutoAWQ works only with Transformers 4.x. The `.[training]` extra pins `transformers<5.0.0` for compatibility. If you upgraded Transformers to 5.x elsewhere, reinstall with `pip install -e ".[training]"` so the resolver picks 4.x for this project.
+
 ```bash
 python training/quantize_base_model.py
 ```
 
-Defaults (model, output-dir, bits, group-size, calib-samples) are in `training_config.yaml`; override with CLI if needed.
+Defaults (model, output-dir, bits, group-size, calib-samples) are in `training_config.yaml`; override with CLI if needed. On failure, run with `--no-fallback` to see the full traceback.
 
 ## 6) Serve with vLLM Multi-LoRA
 
