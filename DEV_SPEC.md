@@ -289,6 +289,7 @@ paper-pilot/
 | **F：本地模型（可选）** | LocalModelManager，Router/Critic 本地推理，Fallback 逻辑 |
 | **G：微调 Pipeline（可选）** | Router 训练数据合成，LoRA SFT，DPO 数据与训练，量化导出 |
 | **H：验收与文档** | 集成/E2E 测试收口，README，面试 Demo 脚本 |
+| **I：记忆模块优化** | 语义向量检索、事实去重、低质量答案过滤、启发式兜底改进、记忆上限与淘汰、短期记忆持久化 |
 
 ### 任务列表（auto-coder 兼容格式）
 
@@ -417,6 +418,29 @@ paper-pilot/
   - 产物: `tests/integration/test_checkpointer_sessions.py`
   - 验收: 短期记忆/会话隔离行为符合预期
 
+### 阶段 I：记忆模块优化
+
+> 对 D4 已实现的记忆模块进行质量与健壮性提升，各任务相互独立，可按优先级单独交付。
+
+- [ ] I1 语义向量检索替代关键词匹配 — 用 embedding（如 sentence-transformers）替换 `LongTermMemory.recall` 的关键词重叠评分；引入向量索引（faiss 或 chromadb），保持 `recall(question, top_k)` 接口不变
+  - 产物: `src/memory/long_term.py`（更新 recall 实现），可选 `src/memory/vector_store.py`，`tests/unit/test_long_term_memory.py`（更新断言）
+  - 验收: 同义词/缩写场景（如 "self-attention" vs "Transformer attention"）能被正确召回；关键词不重叠时不返回零结果；pytest 通过
+- [ ] I2 强制 pass 后跳过 save_memory — 在 `run_save_memory` 中检查 `state.critic_verdict`；若 `passed=False`（重试耗尽被强制放行），跳过 memorize 并在 reasoning_trace 中记录跳过原因，避免低质量事实污染长期记忆
+  - 产物: `src/agent/nodes/memory_nodes.py`（更新 `run_save_memory`），`tests/unit/test_memory.py`（补充强制 pass 场景）
+  - 验收: Mock critic_verdict.passed=False + retry_count≥max_retries，断言 memorize 未被调用；正常 passed=True 时行为不变
+- [ ] I3 事实去重与 upsert — 存入前先 recall，若新事实与现有事实语义相似度超过阈值（如余弦 ≥0.92），跳过存储或替换旧事实（upsert），而非盲目追加
+  - 产物: `src/memory/long_term.py`（更新 `memorize`），`tests/unit/test_long_term_memory.py`（补充重复事实场景）
+  - 验收: 写入内容相近的两条事实后，存储总数不翻倍；不同事实正常追加；pytest 通过
+- [ ] I4 改进启发式兜底策略 — 将 `_heuristic_extract` 从"取第一句 >20 字符"改为综合评分（句子长度 + 是否含数字/专有名词/关键术语），返回评分最高的 1～2 句，而非固定取首句
+  - 产物: `src/agent/nodes/memory_nodes.py`（更新 `_heuristic_extract`），`tests/unit/test_memory.py`（补充多种 answer 格式的断言）
+  - 验收: 铺垫句靠后、核心结论居中的 answer 能正确提取核心句；pytest 通过
+- [ ] I5 记忆上限与淘汰策略 — 在 `LongTermMemory` 中新增 `max_facts` 配置项（默认 1000）；超限时按 LRU（最旧时间戳优先淘汰）或 LFU（`Fact` 模型新增 `recall_count` 字段，按召回次数淘汰）删除事实，并同步重写 JSONL 文件
+  - 产物: `src/memory/long_term.py`（更新 `memorize` 与 `Fact` 模型），`src/config.py`（`MemoryConfig` 增加 `max_facts` 字段），`tests/unit/test_long_term_memory.py`
+  - 验收: 写入超过 max_facts 条事实后，总数不超限；JSONL 内容与内存列表一致；pytest 通过
+- [ ] I6 短期记忆持久化（SQLite backend） — 在 `create_checkpointer` 中新增 `"sqlite"` backend，使用 LangGraph 内置 `SqliteSaver`；路径通过 `MemoryConfig` 配置；进程重启后对话历史可恢复
+  - 产物: `src/memory/short_term.py`（更新 `create_checkpointer`），`src/config.py`（`MemoryConfig` 增加 `checkpointer_backend` 与 `checkpointer_db` 字段），`tests/unit/test_short_term.py`
+  - 验收: backend="sqlite" 时返回 `SqliteSaver` 实例；重建 checkpointer 后能从 DB 恢复已有 checkpoint；pytest 通过
+
 ---
 
 ### 总体进度（模板）
@@ -431,7 +455,8 @@ paper-pilot/
 | F | 4 | 0 | 0% |
 | G | 4 | 0 | 0% |
 | H | 10 | 0 | 0% |
-| **总计** | **40** | **0** | **0%** |
+| I | 6 | 0 | 0% |
+| **总计** | **46** | **0** | **0%** |
 
 ---
 

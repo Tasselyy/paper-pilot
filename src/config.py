@@ -251,6 +251,11 @@ def load_settings(
     # Resolve environment variable placeholders
     resolved = _resolve_env_vars(raw_data)
 
+    # Override vLLM base URL from env (e.g. when vLLM runs in cloud and benchmark runs locally)
+    env_base = os.environ.get("VLLM_BASE_URL")
+    if env_base:
+        resolved.setdefault("vllm", {})["base_url"] = env_base.rstrip("/")
+
     # Apply optional overrides
     if overrides:
         _deep_merge(resolved, overrides)

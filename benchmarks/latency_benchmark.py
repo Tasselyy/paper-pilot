@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -14,6 +15,12 @@ from statistics import mean
 from typing import Any
 
 import yaml
+
+# Ensure project root is on path when run as script (e.g. python benchmarks/latency_benchmark.py)
+_benchmark_dir = Path(__file__).resolve().parent
+_project_root = _benchmark_dir.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 from main import run_agent
 

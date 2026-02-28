@@ -50,6 +50,8 @@ local-models = [
 vllm = [
     "openai>=1.51.0",
     "gguf>=0.17.0",  # vLLM needs Keys, VisionProjectorType from gguf.constants
+    "cachetools>=5.0.0",  # vLLM subclasses cachetools.LRUCache; old/mirror builds may lack it
+    "email-validator>=2.0",  # Pydantic/FastAPI need it for Contact/EmailStr; missing → NoneType.partition
 ]
 dev = [
     "pytest>=8.0",
