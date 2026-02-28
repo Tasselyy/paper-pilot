@@ -193,6 +193,7 @@ paper-pilot/
 │   │   │   ├── slot_filling.py   # Slot Filling 节点
 │   │   │   ├── critic.py         # Critic 节点 (Reflexion)
 │   │   │   ├── memory_nodes.py   # load_memory / save_memory
+│   │   │   ├── retry_refine.py   # Reflexion 重试：改写 question/计划
 │   │   │   └── format_output.py
 │   │   ├── strategies/
 │   │   │   ├── simple.py
@@ -216,6 +217,7 @@ paper-pilot/
 │   │   ├── slot_filling.py
 │   │   ├── strategies.py
 │   │   ├── critic.py
+│   │   ├── retry_refine.py
 │   │   └── memory.py
 │   └── tracing/
 │       └── tracer.py             # AgentTrace + JSONL
@@ -246,7 +248,7 @@ paper-pilot/
 | **agent/strategies/comparative.py** | ReWOO：优先 intent.entities/dimensions，并行检索 + 合成 | §6.5 |
 | **agent/strategies/exploratory.py** | ReAct 子图：think / act / observe / synthesize | §5.6, §6.6 |
 | **agent/nodes/critic.py** | Critic 评估（本地 DPO 或 Cloud LLM），写 critic_verdict | §6.7 |
-| **agent/nodes/.../retry_refine** | Reflexion 重试：根据 feedback 改写 question 或计划 | §6.8 |
+| **agent/nodes/retry_refine.py** | Reflexion 重试：根据 feedback 改写 question 或计划 | §6.8 |
 | **tools/mcp_client.py** | MultiServerMCPClient 连接 RAG Server，get_tools() | §7 |
 | **tools/tool_wrapper.py** | RAGToolWrapper：search / list_collections / get_doc_info，错误处理 | §7.2 |
 | **memory/long_term.py** | 长期记忆 recall / memorize，JSONL 持久化 | §8 |
@@ -443,20 +445,19 @@ paper-pilot/
 
 ---
 
-### 总体进度（模板）
-
+### 总体进度
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
-| A | 4 | 0 | 0% |
-| B | 4 | 0 | 0% |
-| C | 6 | 0 | 0% |
-| D | 4 | 0 | 0% |
-| E | 4 | 0 | 0% |
-| F | 4 | 0 | 0% |
-| G | 4 | 0 | 0% |
-| H | 10 | 0 | 0% |
+| A | 4 | 4 | 100% |
+| B | 4 | 4 | 100% |
+| C | 6 | 6 | 100% |
+| D | 4 | 4 | 100% |
+| E | 4 | 4 | 100% |
+| F | 4 | 4 | 100% |
+| G | 4 | 4 | 100% |
+| H | 10 | 7 | 70% |
 | I | 6 | 0 | 0% |
-| **总计** | **46** | **0** | **0%** |
+| **总计** | **46** | **37** | **80%** |
 
 ---
 

@@ -108,8 +108,9 @@ Round 3 still failing → STOP, show failure report to user
 ### 5. Persist
 
 1. **Update `DEV_SPEC.md`** (global file): change task marker `[ ]` → `[x]`
-2. **Re-sync**: `python .cursor/skills/auto-coder/scripts/sync_spec.py --force`
-3. **Show summary & ask**:
+2. **Update progress table**: run `python .cursor/skills/auto-coder/scripts/update_progress_table.py` so the "总体进度" table in §6 reflects current task counts (no manual editing).
+3. **Re-sync**: `python .cursor/skills/auto-coder/scripts/sync_spec.py --force`
+4. **Show summary & ask**:
 
 ```
 ✅ [A3] 配置加载与校验 — done
@@ -143,7 +144,8 @@ auto-coder/
 ├── SKILL.md              ← this file
 ├── .spec_hash            ← auto-generated hash
 ├── scripts/
-│   └── sync_spec.py      ← splits DEV_SPEC.md into chapters
+│   ├── sync_spec.py      ← splits DEV_SPEC.md into chapters
+│   └── update_progress_table.py  ← rewrites "总体进度" table from task markers
 └── specs/                ← auto-generated from DEV_SPEC (## N. Title)
     ├── 01-overview.md
     ├── 02-features.md
