@@ -4,27 +4,10 @@ Quick validation script for skills - minimal version
 """
 
 import sys
+import os
 import re
-
-try:
-    import yaml
-except ImportError:
-    # Fallback: minimal YAML parsing if PyYAML not installed
-    yaml = None
-
+import yaml
 from pathlib import Path
-
-
-def _parse_frontmatter_fallback(text):
-    """Minimal frontmatter parser when PyYAML is not available."""
-    result = {}
-    for line in text.strip().splitlines():
-        line = line.strip()
-        if ':' in line:
-            key, _, value = line.partition(':')
-            result[key.strip()] = value.strip().strip('"').strip("'")
-    return result
-
 
 def validate_skill(skill_path):
     """Basic validation of a skill"""
@@ -36,7 +19,7 @@ def validate_skill(skill_path):
         return False, "SKILL.md not found"
 
     # Read and validate frontmatter
-    content = skill_md.read_text(encoding='utf-8')
+    content = skill_md.read_text()
     if not content.startswith('---'):
         return False, "No YAML frontmatter found"
 
@@ -49,19 +32,16 @@ def validate_skill(skill_path):
 
     # Parse YAML frontmatter
     try:
-        if yaml:
-            frontmatter = yaml.safe_load(frontmatter_text)
-        else:
-            frontmatter = _parse_frontmatter_fallback(frontmatter_text)
+        frontmatter = yaml.safe_load(frontmatter_text)
         if not isinstance(frontmatter, dict):
             return False, "Frontmatter must be a YAML dictionary"
-    except Exception as e:
+    except yaml.YAMLError as e:
         return False, f"Invalid YAML in frontmatter: {e}"
 
     # Define allowed properties
     ALLOWED_PROPERTIES = {'name', 'description', 'license', 'allowed-tools', 'metadata', 'compatibility'}
 
-    # Check for unexpected properties
+    # Check for unexpected properties (excluding nested keys under metadata)
     unexpected_keys = set(frontmatter.keys()) - ALLOWED_PROPERTIES
     if unexpected_keys:
         return False, (
@@ -113,12 +93,11 @@ def validate_skill(skill_path):
 
     return True, "Skill is valid!"
 
-
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python quick_validate.py <skill_directory>")
         sys.exit(1)
-
+    
     valid, message = validate_skill(sys.argv[1])
     print(message)
     sys.exit(0 if valid else 1)
