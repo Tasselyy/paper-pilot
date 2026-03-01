@@ -69,6 +69,7 @@ python_functions = ["test_*"]
 asyncio_mode = "auto"
 markers = [
     "e2e: end-to-end tests requiring a running RAG Server",
+    "slow: slower integration tests (e.g. subprocess MCP stub)",
 ]
 addopts = "-v --tb=short -q"
 

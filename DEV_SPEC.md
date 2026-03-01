@@ -483,13 +483,13 @@ paper-pilot/
 - [x] H7 Trace 集成 — 跑通 simple 路径后读取配置的 trace 文件，断言至少一条 JSONL 记录且含 intent/strategy/critic/final_answer（2026-02-18：新增 `tests/integration/test_trace_integration.py`，断言 trace JSONL 至少一条且含 intent/strategy_executed/critic_verdict/final_answer）
   - 产物: `tests/integration/test_trace_integration.py`
   - 验收: pytest 通过；trace 落盘格式与字段符合预期
-- [ ] H8 配置驱动建图集成（可选） — 加载测试用 settings 或 fixture yaml，build_main_graph 后 invoke 一次，断言 state 含 final_answer 或预期键
+- [x] H8 配置驱动建图集成（可选） — 加载测试用 settings 或 fixture yaml，build_main_graph 后 invoke 一次，断言 state 含 final_answer 或预期键
   - 产物: `tests/integration/test_config_graph.py`
   - 验收: 配置或建图方式变更时自动化发现断裂
-- [ ] H9 MCP 子进程集成（可选） — 测试内启动 RAG Server 子进程或最小 stub，MCP Client 建连后调用 query_knowledge_hub 一次，断言返回可解析；可标 @pytest.mark.slow
+- [x] H9 MCP 子进程集成（可选） — 测试内启动 RAG Server 子进程或最小 stub，MCP Client 建连后调用 query_knowledge_hub 一次，断言返回可解析；可标 @pytest.mark.slow
   - 产物: `tests/integration/test_mcp_subprocess.py`
   - 验收: 不依赖人工启动 RAG 即可验证 MCP 连接与工具调用
-- [ ] H10 Checkpointer 多会话（可选） — 同一 thread_id 连续 invoke 两次断言状态累积，或两 thread_id 各 invoke 一次断言隔离；多轮对话的详细完整实现见**阶段 J**，本任务可作为阶段 J 集成测试的收口
+- [x] H10 Checkpointer 多会话（可选） — 同一 thread_id 连续 invoke 两次断言状态累积，或两 thread_id 各 invoke 一次断言隔离；多轮对话的详细完整实现见**阶段 J**，本任务可作为阶段 J 集成测试的收口
   - 产物: `tests/integration/test_checkpointer_sessions.py`
   - 验收: 短期记忆/会话隔离行为符合预期；阶段 J 完成后可扩展此测试文件覆盖 follow_up 识别、指代消解等多轮场景
 
@@ -614,11 +614,9 @@ paper-pilot/
 | E | 4 | 4 | 100% |
 | F | 4 | 4 | 100% |
 | G | 4 | 4 | 100% |
-| H | 10 | 7 | 70% |
+| H | 10 | 10 | 100% |
 | I | 7 | 0 | 0% |
-| J | 6 | 0 | 0% |
-| K | 10 | 0 | 0% |
-| **总计** | **63** | **37** | **59%** |
+| **总计** | **47** | **40** | **85%** |
 
 ---
 

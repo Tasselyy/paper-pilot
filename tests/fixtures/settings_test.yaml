@@ -1,0 +1,31 @@
+# Minimal settings for config-driven graph integration tests (H8).
+# Used to verify load_settings() + build_main_graph() pipeline.
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  temperature: 0.3
+  api_key: null
+
+mcp:
+  rag_default_collection: null
+  connections:
+    rag_server:
+      transport: streamable-http
+      url: http://127.0.0.1:8000/mcp
+
+agent:
+  max_retries: 2
+  max_react_steps: 5
+  router_model_path: null
+  critic_model_path: null
+
+memory:
+  memory_file: data/long_term_memory.jsonl
+
+tracing:
+  trace_dir: data/traces
+  trace_file: trace.jsonl
+
+vllm:
+  enabled: false
